@@ -24,10 +24,11 @@ class BoxPreferences {
 	public static var presetHandle: Handle;
 	static var locales: Array<String> = null;
 	static var themes: Array<String> = null;
-	static var worldColor = kha.Color.fromValue(0xff030303);
+	static var worldColor = kha.Color.fromValue(0xff020202);
 
 	@:access(zui.Zui)
 	public static function show() {
+
 		UIBox.showCustom(function(ui: Zui) {
 			if (ui.tab(htab, tr("Interface"), true)) {
 
@@ -50,6 +51,9 @@ class BoxPreferences {
 					if (hscale.value == null || Math.isNaN(hscale.value)) hscale.value = 1.0;
 					Config.raw.window_scale = hscale.value;
 					setScale();
+					#if arm_touchui
+					alignToLeftSide();
+					#end
 				}
 				Context.hscaleWasChanged = hscale.changed;
 
@@ -61,6 +65,9 @@ class BoxPreferences {
 				if (zoomDirectionHandle.changed) {
 					Config.raw.zoom_direction = zoomDirectionHandle.position;
 				}
+
+				Config.raw.wrap_mouse = ui.check(Id.handle({selected: Config.raw.wrap_mouse}), tr("Wrap Mouse"));
+				if (ui.isHovered) ui.tooltip(tr("Wrap mouse around view boundaries during camera control"));
 
 				Config.raw.node_preview = ui.check(Id.handle({selected: Config.raw.node_preview}), tr("Show Node Preview"));
 
@@ -79,7 +86,7 @@ class BoxPreferences {
 				// var gridSnap = ui.check(Id.handle({selected: false}), "Grid Snap");
 
 				ui.endElement();
-				ui.row([0.5]);
+				ui.row([0.5, 0.5]);
 				if (ui.button(tr("Restore"))) {
 					UIMenu.draw(function(ui: Zui) {
 						ui.text(tr("Restore defaults?"), Right, ui.t.HIGHLIGHT_COL);
@@ -96,7 +103,7 @@ class BoxPreferences {
 							});
 						}
 						if (ui.button(tr("Import..."), Left)) {
-							UIFiles.show("arm", false, function(path: String) {
+							UIFiles.show("arm", false, false, function(path: String) {
 								Data.getBlob(path, function(b: kha.Blob) {
 									var raw = Json.parse(b.toString());
 									iron.App.notifyOnInit(function() {
@@ -110,6 +117,15 @@ class BoxPreferences {
 							});
 						}
 					}, 3);
+				}
+				if (ui.button(tr("Reset Layout"))) {
+					UIMenu.draw(function(ui: Zui) {
+						ui.text(tr("Reset layout?"), Right, ui.t.HIGHLIGHT_COL);
+						if (ui.button(tr("Confirm"), Left)) {
+							App.initLayout();
+							Config.save();
+						}
+					}, 2);
 				}
 			}
 
@@ -152,13 +168,13 @@ class BoxPreferences {
 				}
 
 				if (ui.button(tr("Import"))) {
-					UIFiles.show("json", false, function(path: String) {
+					UIFiles.show("json", false, false, function(path: String) {
 						ImportTheme.run(path);
 					});
 				}
 
 				if (ui.button(tr("Export"))) {
-					UIFiles.show("json", true, function(path) {
+					UIFiles.show("json", true, false, function(path) {
 						path += Path.sep + UIFiles.filename;
 						if (!path.endsWith(".json")) path += ".json";
 						Krom.fileSaveBytes(path, Bytes.ofString(Json.stringify(arm.App.theme)).getData());
@@ -177,11 +193,10 @@ class BoxPreferences {
 				ui.text("", 0, h.color);
 				if (ui.isHovered && ui.inputReleased) {
 					UIMenu.draw(function(ui) {
-						ui.fill(0, 0, ui._w / ui.SCALE(), ui.t.ELEMENT_H * 9, ui.t.SEPARATOR_COL);
 						ui.changed = false;
 						zui.Ext.colorWheel(ui, h, false, null, false);
 						if (ui.changed) UIMenu.keepOpen = true;
-					}, 3);
+					}, 10);
 				}
 				var val = untyped h.color;
 				if (val < 0) val += untyped 4294967296;
@@ -218,15 +233,14 @@ class BoxPreferences {
 						if (ui.isHovered && ui.inputReleased) {
 							h.color = untyped theme[key];
 							UIMenu.draw(function(ui) {
-								ui.fill(0, 0, ui._w / ui.SCALE(), ui.t.ELEMENT_H * 9, ui.t.SEPARATOR_COL);
 								ui.changed = false;
 								untyped theme[key] = zui.Ext.colorWheel(ui, h, false, null, false);
 								if (ui.changed) UIMenu.keepOpen = true;
-							}, 3);
+							}, 10);
 						}
 					}
 
-					if (Std.is(val, Bool)) {
+					if (Std.isOfType(val, Bool)) {
 						h.selected = val;
 						untyped theme[key] = ui.check(h, key);
 					}
@@ -252,7 +266,6 @@ class BoxPreferences {
 					ui.g.end();
 					while (History.undoLayers.length < Config.raw.undo_steps) {
 						var l = new LayerSlot("_undo" + History.undoLayers.length);
-						l.createMask(0, false);
 						History.undoLayers.push(l);
 					}
 					while (History.undoLayers.length > Config.raw.undo_steps) {
@@ -331,7 +344,7 @@ class BoxPreferences {
 				ui.endElement();
 				ui.row([0.5]);
 				if (ui.button(tr("Help"))) {
-					File.explorer("https://github.com/armory3d/armorpaint_docs#pen");
+					File.loadUrl("https://github.com/armory3d/armorpaint_docs#pen");
 				}
 			}
 
@@ -441,12 +454,12 @@ class BoxPreferences {
 				}
 
 				if (ui.button(tr("Import"))) {
-					UIFiles.show("json", false, function(path: String) {
+					UIFiles.show("json", false, false, function(path: String) {
 						ImportKeymap.run(path);
 					});
 				}
 				if (ui.button(tr("Export"))) {
-					UIFiles.show("json", true, function(dest: String) {
+					UIFiles.show("json", true, false, function(dest: String) {
 						if (!UIFiles.filename.endsWith(".json")) UIFiles.filename += ".json";
 						var path = Path.data() + Path.sep + "keymap_presets" + Path.sep + Config.raw.keymap;
 						File.copy(path, dest + Path.sep + UIFiles.filename);
@@ -485,7 +498,7 @@ let h1 = new zui.Handle();
 plugin.drawUI = function(ui) {
 	if (ui.panel(h1, 'New Plugin')) {
 		if (ui.button('Button')) {
-			arm.Log.error('Hello');
+			console.error('Hello');
 		}
 	}
 }
@@ -503,7 +516,7 @@ plugin.drawUI = function(ui) {
 					});
 				}
 				if (ui.button(tr("Import"))) {
-					UIFiles.show("js,wasm,zip", false, function(path: String) {
+					UIFiles.show("js,wasm,zip", false, false, function(path: String) {
 						ImportPlugin.run(path);
 					});
 				}
@@ -538,12 +551,12 @@ plugin.drawUI = function(ui) {
 								iron.data.Data.getBlob("plugins/" + f, function(blob: kha.Blob) {
 									TabScript.hscript.text = blob.toString();
 									iron.data.Data.deleteBlob("plugins/" + f);
-									Log.info("Script opened");
+									Console.info("Script opened");
 								});
 
 							}
 							if (ui.button(tr("Export"), Left)) {
-								UIFiles.show("js", true, function(dest: String) {
+								UIFiles.show("js", true, false, function(dest: String) {
 									if (!UIFiles.filename.endsWith(".js")) UIFiles.filename += ".js";
 									File.copy(path, dest + Path.sep + UIFiles.filename);
 								});
@@ -561,7 +574,23 @@ plugin.drawUI = function(ui) {
 				}
 			}
 		}, 600, 400, function() { Config.save(); });
+
+		#if arm_touchui
+		alignToLeftSide();
+		#end
 	}
+
+	#if arm_touchui
+	static function alignToLeftSide() {
+		@:privateAccess UIBox.modalH = Std.int((kha.System.windowHeight() - UIHeader.inst.headerh) / App.uiBox.SCALE());
+		var appw = kha.System.windowWidth();
+		var apph = kha.System.windowHeight();
+		var mw = @:privateAccess Std.int(UIBox.modalW * App.uiBox.SCALE());
+		var mh = @:privateAccess Std.int(UIBox.modalH * App.uiBox.SCALE());
+		UIBox.hwnd.dragX = Std.int(-appw / 2 + mw / 2);
+		UIBox.hwnd.dragY = Std.int(-apph / 2 + mh / 2 + UIHeader.inst.headerh);
+	}
+	#end
 
 	public static function fetchThemes() {
 		themes = File.readDirectory(Path.data() + Path.sep + "themes");

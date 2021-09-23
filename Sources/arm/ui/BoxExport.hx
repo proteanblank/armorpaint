@@ -17,7 +17,7 @@ class BoxExport {
 	public static var hpreset = Id.handle();
 	public static var files: Array<String> = null;
 	public static var preset: TExportPreset = null;
-	static var channels = ["base_r", "base_g", "base_b", "height", "metal", "nor_r", "nor_g", "nor_b", "occ", "opac", "rough", "smooth", "emis", "subs", "0.0", "1.0"];
+	static var channels = ["base_r", "base_g", "base_b", "height", "metal", "nor_r", "nor_g", "nor_g_directx", "nor_b", "occ", "opac", "rough", "smooth", "emis", "subs", "0.0", "1.0"];
 	static var colorSpaces = ["linear", "srgb"];
 
 	public static function showTextures() {
@@ -99,7 +99,7 @@ class BoxExport {
 			if (ui.button(tr("Export"))) {
 				UIBox.show = false;
 				var filters = App.bitsHandle.position != Bits8 ? "exr" : Context.formatType == FormatPng ? "png" : "jpg";
-				UIFiles.show(filters, true, function(path: String) {
+				UIFiles.show(filters, true, false, function(path: String) {
 					Context.textureExportPath = path;
 					function _init() {
 						ExportTexture.run(path, bakeMaterial);
@@ -137,7 +137,7 @@ class BoxExport {
 			}
 
 			if (ui.button(tr("Import"))) {
-				UIFiles.show("json", false, function(path: String) {
+				UIFiles.show("json", false, false, function(path: String) {
 					path = path.toLowerCase();
 					if (path.endsWith(".json")) {
 						var filename = path.substr(path.lastIndexOf(Path.sep) + 1);
@@ -146,9 +146,9 @@ class BoxExport {
 						fetchPresets();
 						preset = null;
 						hpreset.position = files.indexOf(filename.substr(0, filename.length - 5)); // Strip .json
-						Log.info("Preset '" + filename + "' imported.");
+						Console.info("Preset '" + filename + "' imported.");
 					}
-					else Log.error(Strings.error1());
+					else Console.error(Strings.error1());
 				});
 			}
 
@@ -256,7 +256,7 @@ class BoxExport {
 						tris += Std.int(inda.values.length / 3);
 					}
 				}
-				ui.text(tris + " triangles");
+				ui.text(tris + " " + tr("triangles"));
 
 				ui.row([0.5, 0.5]);
 				if (ui.button(tr("Cancel"))) {
@@ -264,7 +264,7 @@ class BoxExport {
 				}
 				if (ui.button(tr("Export"))) {
 					UIBox.show = false;
-					UIFiles.show(Context.exportMeshFormat == FormatObj ? "obj" : "arm", true, function(path: String) {
+					UIFiles.show(Context.exportMeshFormat == FormatObj ? "obj" : "arm", true, false, function(path: String) {
 						var f = UIFiles.filename;
 						if (f == "") f = tr("untitled");
 						ExportMesh.run(path + Path.sep + f, applyDisplacement);
@@ -290,7 +290,7 @@ class BoxExport {
 				}
 				if (ui.button(tr("Export"))) {
 					UIBox.show = false;
-					UIFiles.show("arm", true, function(path: String) {
+					UIFiles.show("arm", true, false, function(path: String) {
 						var f = UIFiles.filename;
 						if (f == "") f = tr("untitled");
 						iron.App.notifyOnInit(function() {
@@ -318,7 +318,7 @@ class BoxExport {
 				}
 				if (ui.button(tr("Export"))) {
 					UIBox.show = false;
-					UIFiles.show("arm", true, function(path: String) {
+					UIFiles.show("arm", true, false, function(path: String) {
 						var f = UIFiles.filename;
 						if (f == "") f = tr("untitled");
 						iron.App.notifyOnInit(function() {
@@ -331,18 +331,10 @@ class BoxExport {
 	}
 
 	static function fetchPresets() {
-		#if (krom_android || krom_ios)
-
-		files = ["generic"];
-
-		#else
-
 		files = File.readDirectory(Path.data() + Path.sep + "export_presets");
 		for (i in 0...files.length) {
 			files[i] = files[i].substr(0, files[i].length - 5); // Strip .json
 		}
-
-		#end
 	}
 
 	static function parsePreset() {

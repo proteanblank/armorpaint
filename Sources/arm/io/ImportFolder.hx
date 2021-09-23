@@ -6,7 +6,6 @@ import iron.data.MaterialData;
 import arm.ui.UIHeader;
 import arm.ui.UISidebar;
 import arm.util.RenderUtil;
-import arm.util.MaterialUtil;
 import arm.sys.Path;
 import arm.sys.File;
 import arm.shader.NodesMaterial;
@@ -74,8 +73,18 @@ class ImportFolder {
 		var dirs = path.split(Path.sep);
 		canvas.name = dirs[dirs.length - 1];
 		var nout: TNode = null;
-		for (n in canvas.nodes) if (n.type == "OUTPUT_MATERIAL_PBR") { nout = n; break; }
-		for (n in canvas.nodes) if (n.name == "RGB") { nodes.removeNode(n, canvas); break; }
+		for (n in canvas.nodes) {
+			if (n.type == "OUTPUT_MATERIAL_PBR") {
+				nout = n;
+				break;
+			}
+		}
+		for (n in canvas.nodes) {
+			if (n.name == "RGB") {
+				nodes.removeNode(n, canvas);
+				break;
+			}
+		}
 
 		// Place nodes
 		var pos = 0;
@@ -113,6 +122,7 @@ class ImportFolder {
 		MakeMaterial.parsePaintMaterial();
 		RenderUtil.makeMaterialPreview();
 		UISidebar.inst.hwnd1.redraws = 2;
+		History.newMaterial();
 	}
 
 	static function placeImageNode(nodes: Nodes, canvas: TNodeCanvas, asset: String, ny: Int, to_id: Int, to_socket: Int) {

@@ -7,7 +7,7 @@ plugin.drawUI = function(ui) {
 	if (ui.panel(h1, "Converter")) {
 		ui.row([1/2, 1/2]);
 		if (ui.button(".arm to .json")) {
-			arm.UIFiles.show("arm", false, function(path) {
+			arm.UIFiles.show("arm", false, true, function(path) {
 				iron.Data.getBlob(path, function(b) {
 					let parsed = iron.ArmPack.decode(b.bytes);
 					let out = core.Bytes.ofString(core.Json.stringify(parsed, function(key, value) {
@@ -33,7 +33,7 @@ plugin.drawUI = function(ui) {
 			});
 		}
 		if (ui.button(".json to .arm")) {
-			arm.UIFiles.show("json", false, function(path) {
+			arm.UIFiles.show("json", false, true, function(path) {
 				iron.Data.getBlob(path, function(b) {
 					let parsed = core.Json.parse(b.toString());
 					function iterate(d) {
@@ -41,7 +41,7 @@ plugin.drawUI = function(ui) {
 							let v = core.ReflectField(d, n);
 							if (core.StdIs(v, Array)) {
 								if (core.StdIs(v[0], Number)) {
-									arm.Log.trace(n);
+									console.log(n);
 									let ar = null;
 									if (v[0] === 0) ar = new Float32Array(v.length - 1);
 									else if (v[0] === 1) ar = new Uint32Array(v.length - 1);

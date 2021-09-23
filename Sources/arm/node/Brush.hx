@@ -58,7 +58,6 @@ class Brush {
 	}
 
 	public static function parse(canvas: TNodeCanvas, onAdd = true) {
-
 		nodes = canvas.nodes;
 		links = canvas.links;
 
@@ -79,7 +78,6 @@ class Brush {
 	}
 
 	static function build_node(node: TNode): String {
-
 		// Get node name
 		var name = node_name(node);
 
@@ -97,7 +95,7 @@ class Brush {
 		// Expose button values in node class
 		for (b in node.buttons) {
 			if (b.type == "ENUM") {
-				var arrayData = Std.is(b.data, Array);
+				var arrayData = Std.isOfType(b.data, Array);
 				var texts = arrayData ? b.data : Nodes.enumTexts(node.type);
 				Reflect.setProperty(v, b.name, texts[b.default_value]);
 			}
@@ -188,13 +186,7 @@ class Brush {
 
 		var v: LogicNode = null;
 
-		if (inp.type == "OBJECT") {
-			v = createClassInstance("ObjectNode", [tree, inp.default_value]);
-		}
-		else if (inp.type == "ANIMACTION") {
-			v = createClassInstance("StringNode", [tree, inp.default_value]);
-		}
-		else if (inp.type == "VECTOR") {
+		if (inp.type == "VECTOR") {
 			if (inp.default_value == null) inp.default_value = [0, 0, 0]; // TODO
 			v = createClassInstance("VectorNode", [tree, inp.default_value[0], inp.default_value[1], inp.default_value[2]]);
 		}
@@ -218,7 +210,7 @@ class Brush {
 		else if (inp.type == "STRING") {
 			v = createClassInstance("StringNode", [tree, inp.default_value]);
 		}
-		else { // ACTION, ARRAY
+		else {
 			v = createClassInstance("NullNode", [tree]);
 		}
 		return v;

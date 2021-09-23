@@ -120,7 +120,12 @@ class MakeMaterial {
 	public static function parseParticleMaterial() {
 		var m = Context.particleMaterial;
 		var sc: ShaderContext = null;
-		for (c in m.shader.contexts) if (c.raw.name == "mesh") { sc = c; break; }
+		for (c in m.shader.contexts) {
+			if (c.raw.name == "mesh") {
+				sc = c;
+				break;
+			}
+		}
 		if (sc != null) {
 			m.shader.raw.contexts.remove(sc.raw);
 			m.shader.contexts.remove(sc);
@@ -137,13 +142,18 @@ class MakeMaterial {
 
 		var m = Project.materials[0].data;
 		var scon: ShaderContext = null;
-		for (c in m.shader.contexts) if (c.raw.name == "mesh") { scon = c; break; }
+		for (c in m.shader.contexts) {
+			if (c.raw.name == "mesh") {
+				scon = c;
+				break;
+			}
+		}
 		m.shader.raw.contexts.remove(scon.raw);
 		m.shader.contexts.remove(scon);
 
 		var mcon: TMaterialContext = { name: "mesh", bind_textures: [] };
 
-		var sd = new NodeShaderData({name: "Material", canvas: null});
+		var sd = new NodeShaderData({ name: "Material", canvas: null });
 		var con = MakeMeshPreview.run(sd, mcon);
 
 		for (i in 0...m.contexts.length) {
@@ -170,7 +180,12 @@ class MakeMaterial {
 		var rebuild = heightUsed;
 		if (Config.raw.rp_gi != false && rebuild) {
 			var scon: ShaderContext = null;
-			for (c in m.shader.contexts) if (c.raw.name == "voxel") { scon = c; break; }
+			for (c in m.shader.contexts) {
+				if (c.raw.name == "voxel") {
+					scon = c;
+					break;
+				}
+			}
 			if (scon != null) MakeVoxel.run(scon);
 		}
 	}
@@ -303,16 +318,13 @@ class MakeMaterial {
 
 			if (RenderPathPaint.liveLayer == null) {
 				RenderPathPaint.liveLayer = new arm.data.LayerSlot("_live");
-				RenderPathPaint.liveLayer.createMask(0x00000000);
 			}
 
 			var _space = UIHeader.inst.worktab.position;
 			var _tool = Context.tool;
-			var _layerIsMask = Context.layerIsMask;
 			var _bakeType = Context.bakeType;
 			UIHeader.inst.worktab.position = SpacePaint;
 			Context.tool = ToolBake;
-			Context.layerIsMask = false;
 			Context.bakeType = BakeCurvature;
 
 			MaterialParser.bake_passthrough = true;
@@ -333,7 +345,6 @@ class MakeMaterial {
 
 			UIHeader.inst.worktab.position = _space;
 			Context.tool = _tool;
-			Context.layerIsMask = _layerIsMask;
 			Context.bakeType = _bakeType;
 			parsePaintMaterial(false);
 
@@ -426,6 +437,54 @@ class MakeMaterial {
 		else { // BlendValue
 			frag.add_function(ShaderFunctions.str_hue_sat);
 			return 'mix($cola, hsv_to_rgb(vec3(rgb_to_hsv($cola).r, rgb_to_hsv($cola).g, rgb_to_hsv($colb).b)), $opac)';
+		}
+	}
+
+	public static function blendModeMask(frag: NodeShader, blending: Int, cola: String, colb: String, opac: String): String {
+		if (blending == BlendMix) {
+			return 'mix($cola, $colb, $opac)';
+		}
+		else if (blending == BlendDarken) {
+			return 'mix($cola, min($cola, $colb), $opac)';
+		}
+		else if (blending == BlendMultiply) {
+			return 'mix($cola, $cola * $colb, $opac)';
+		}
+		else if (blending == BlendBurn) {
+			return 'mix($cola, 1.0 - (1.0 - $cola) / $colb, $opac)';
+		}
+		else if (blending == BlendLighten) {
+			return 'max($cola, $colb * $opac)';
+		}
+		else if (blending == BlendScreen) {
+			return '(1.0 - ((1.0 - $opac) + $opac * (1.0 - $colb)) * (1.0 - $cola))';
+		}
+		else if (blending == BlendDodge) {
+			return 'mix($cola, $cola / (1.0 - $colb), $opac)';
+		}
+		else if (blending == BlendAdd) {
+			return 'mix($cola, $cola + $colb, $opac)';
+		}
+		else if (blending == BlendOverlay) {
+			return 'mix($cola, $cola < 0.5 ? 2.0 * $cola * $colb : 1.0 - 2.0 * (1.0 - $cola) * (1.0 - $colb), $opac)';
+		}
+		else if (blending == BlendSoftLight) {
+			return '((1.0 - $opac) * $cola + $opac * ((1.0 - $cola) * $colb * $cola + $cola * (1.0 - (1.0 - $colb) * (1.0 - $cola))))';
+		}
+		else if (blending == BlendLinearLight) {
+			return '($cola + $opac * (2.0 * ($colb - 0.5)))';
+		}
+		else if (blending == BlendDifference) {
+			return 'mix($cola, abs($cola - $colb), $opac)';
+		}
+		else if (blending == BlendSubtract) {
+			return 'mix($cola, $cola - $colb, $opac)';
+		}
+		else if (blending == BlendDivide) {
+			return '(1.0 - $opac) * $cola + $opac * $cola / $colb';
+		}
+		else { // BlendHue, BlendSaturation, BlendColor, BlendValue
+			return 'mix($cola, $colb, $opac)';
 		}
 	}
 

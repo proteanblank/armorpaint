@@ -32,10 +32,11 @@ class UIView2D {
 	public var panX = 0.0;
 	public var panY = 0.0;
 	public var panScale = 1.0;
+	public var uvmapShow = false;
+	public var tiledShow = false;
+	public var controlsDown = false;
 	var texType = TexBase;
 	var layerMode = View2DSelected;
-	var uvmapShow = false;
-	var tiledShow = false;
 
 	public function new() {
 		inst = this;
@@ -107,7 +108,8 @@ class UIView2D {
 			var ty = iron.App.h() / 2 - tw / 2 + panY;
 
 			if (type == View2DLayer) {
-				var layer = l.getChildren() == null ? l : l.getChildren()[0];
+				var layer = l;
+
 				if (Config.raw.brush_live && RenderPathPaint.liveLayerDrawn > 0) {
 					layer = RenderPathPaint.liveLayer;
 				}
@@ -118,16 +120,22 @@ class UIView2D {
 					layer = untyped Layers.flatten();
 					if (current != null) current.begin(false);
 				}
+				else if (layer.isGroup()) {
+					var current = @:privateAccess kha.graphics2.Graphics.current;
+					if (current != null) current.end();
+					layer = untyped Layers.flatten(false, layer.getChildren());
+					if (current != null) current.begin(false);
+				}
 
 				tex =
-					Context.layerIsMask   ? layer.texpaint_mask :
-					texType == TexBase    ? layer.texpaint :
-					texType == TexOpacity ? layer.texpaint :
-					texType == TexNormal  ? layer.texpaint_nor :
-										    layer.texpaint_pack;
+					Context.layer.isMask() ? layer.texpaint :
+					texType == TexBase     ? layer.texpaint :
+					texType == TexOpacity  ? layer.texpaint :
+					texType == TexNormal   ? layer.texpaint_nor :
+										     layer.texpaint_pack;
 
 				channel =
-					Context.layerIsMask     ? 1 :
+					Context.layer.isMask()  ? 1 :
 					texType == TexOcclusion ? 1 :
 					texType == TexRoughness ? 2 :
 					texType == TexMetallic  ? 3 :
@@ -228,7 +236,7 @@ class UIView2D {
 
 			// Controls
 			var ew = Std.int(ui.ELEMENT_W());
-			ui.g.color = ui.t.WINDOW_BG_COL;
+			ui.g.color = ui.t.SEPARATOR_COL;
 			ui.g.fillRect(0, 0, ww, ui.ELEMENT_H() + ui.ELEMENT_OFFSET());
 			ui.g.color = 0xffffffff;
 			ui._x = 2;
@@ -243,7 +251,7 @@ class UIView2D {
 				ui._x += ew + 3;
 				ui._y = 2;
 
-				if (!Context.layerIsMask) {
+				if (!Context.layer.isMask()) {
 					texType = ui.combo(Id.handle({position: texType}), [
 						tr("Base Color"),
 						tr("Normal Map"),
@@ -264,7 +272,7 @@ class UIView2D {
 
 			tiledShow = ui.check(Id.handle({selected: tiledShow}), tr("Tiled"));
 
-			if (Context.tool == ToolPicker) {
+			if (Context.tool == ToolPicker && (type == View2DLayer || type == View2DAsset)) {
 				var cursorImg = Res.get("cursor.k");
 				var hsize = 16 * ui.SCALE();
 				var size = hsize * 2;
@@ -288,10 +296,13 @@ class UIView2D {
 			mouse.x > wx + ww ||
 			mouse.y < wy + headerh ||
 			mouse.y > wy + wh) {
+			if (UIView2D.inst.controlsDown) {
+				UINodes.getCanvasControl(ui, inst);
+			}
 			return;
 		}
 
-		var control = UINodes.getCanvasControl(ui);
+		var control = UINodes.getCanvasControl(ui, inst);
 		panX += control.panX;
 		panY += control.panY;
 		if (control.zoom != 0) {
@@ -329,10 +340,18 @@ class UIView2D {
 		var border = 32;
 		var tw = ww * 0.95 * panScale;
 		var tx = ww / 2 - tw / 2 + panX;
-		var ty = iron.App.h() / 2 - tw / 2 + panY;
+		var hh = iron.App.h();
+		var ty = hh / 2 - tw / 2 + panY;
+
 		if      (tx + border >  ww) panX =  ww / 2 + tw / 2 - border;
 		else if (tx - border < -tw) panX = -tw / 2 - ww / 2 + border;
-		if      (ty + border >  wh) panY =  wh / 2 + tw / 2 - border;
-		else if (ty - border < -tw) panY = -tw / 2 - wh / 2 + border;
+		if      (ty + border >  hh) panY =  hh / 2 + tw / 2 - border;
+		else if (ty - border < -tw) panY = -tw / 2 - hh / 2 + border;
+
+		if (Operator.shortcut(Config.keymap.view_reset)) {
+			panX = 0.0;
+			panY = 0.0;
+			panScale = 1.0;
+		}
 	}
 }

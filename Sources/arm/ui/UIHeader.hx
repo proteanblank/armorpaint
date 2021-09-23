@@ -53,9 +53,6 @@ class UIHeader {
 				var occlusionPicked = Math.round(Context.swatch.occlusion * 100) / 100;
 				var roughnessPicked = Math.round(Context.swatch.roughness * 100) / 100;
 				var metallicPicked = Math.round(Context.swatch.metallic * 100) / 100;
-				#if kha_metal
-				ui.text('TODO'); // Skips first draw
-				#end
 
 				var h = Id.handle();
 				h.color.R = baseRPicked;
@@ -68,7 +65,7 @@ class UIHeader {
 						ui.changed = false;
 						zui.Ext.colorWheel(ui, h, false, null, false);
 						if (ui.changed) UIMenu.keepOpen = true;
-					}, 3);
+					}, 10);
 				}
 
 				ui.text(tr("Base") + ' ($baseRPicked,$baseGPicked,$baseBPicked)');
@@ -85,21 +82,24 @@ class UIHeader {
 			else if (Context.tool == ToolBake) {
 				ui.changed = false;
 
-				var rtBake = Context.bakeType == BakeAO || Context.bakeType == BakeLightmap || Context.bakeType == BakeBentNormal || Context.bakeType == BakeThickness;
-				var baking = false;
-
 				#if (kha_direct3d12 || kha_vulkan)
-				baking = Context.pdirty > 0;
+				var baking = Context.pdirty > 0;
+				var rtBake = Context.bakeType == BakeAO || Context.bakeType == BakeLightmap || Context.bakeType == BakeBentNormal || Context.bakeType == BakeThickness;
 				if (baking && ui.button(tr("Stop"))) {
 					Context.pdirty = 0;
 					Context.rdirty = 2;
 				}
+				#else
+				var baking = false;
+				var rtBake = false;
 				#end
 
 				if (!baking && ui.button(tr("Bake"))) {
 					Context.pdirty = rtBake ? Context.bakeSamples : 1;
 					Context.rdirty = 3;
-					Context.layerPreviewDirty = true;
+					App.notifyOnNextFrame(function() {
+						Context.layerPreviewDirty = true;
+					});
 					UISidebar.inst.hwnd0.redraws = 2;
 					History.pushUndo = true;
 				}
@@ -150,8 +150,8 @@ class UIHeader {
 				}
 				#if (kha_direct3d12 || kha_vulkan)
 				if (rtBake) {
-					ui.text(tr("Rays/pix:") + ' ${arm.render.RenderPathRaytrace.raysPix}');
-					ui.text(tr("Rays/sec:") + ' ${arm.render.RenderPathRaytrace.raysSec}');
+					ui.text(tr("Rays/pix:") + ' ${arm.render.RenderPathRaytraceBake.raysPix}');
+					ui.text(tr("Rays/sec:") + ' ${arm.render.RenderPathRaytraceBake.raysSec}');
 				}
 				#end
 				if (Context.bakeType == BakeCurvature) {
@@ -270,7 +270,7 @@ class UIHeader {
 				}
 
 				if (Context.tool == ToolFill) {
-					ui.combo(Context.fillTypeHandle, [tr("Object"), tr("Face"), tr("Angle")], tr("Fill Mode"));
+					ui.combo(Context.fillTypeHandle, [tr("Object"), tr("Face"), tr("Angle"), tr("UV Island")], tr("Fill Mode"));
 					if (Context.fillTypeHandle.changed) {
 						if (Context.fillTypeHandle.position == FillFace) {
 							ui.g.end();
@@ -297,8 +297,12 @@ class UIHeader {
 					var symXHandle = Id.handle({selected: false});
 					var symYHandle = Id.handle({selected: false});
 					var symZHandle = Id.handle({selected: false});
+					#if krom_ios
+					ui._x -= 10 * sc;
+					#else
 					ui._w = Std.int(56 * sc);
 					ui.text(tr("Symmetry"));
+					#end
 					ui._w = Std.int(25 * sc);
 					Context.symX = ui.check(symXHandle, tr("X"));
 					Context.symY = ui.check(symYHandle, tr("Y"));
@@ -306,8 +310,16 @@ class UIHeader {
 					if (symXHandle.changed || symYHandle.changed || symZHandle.changed) {
 						MakeMaterial.parsePaintMaterial();
 					}
-
 					ui._w = _w;
+				}
+
+				if (Context.tool == ToolBlur) {
+					ui._x += 10 * ui.SCALE();
+					var dirHandle = Id.handle({selected: false});
+					Context.blurDirectional = ui.check(dirHandle, tr("Directional"));
+					if (dirHandle.changed) {
+						MakeMaterial.parsePaintMaterial();
+					}
 				}
 			}
 		}

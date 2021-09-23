@@ -8,7 +8,7 @@ import iron.math.Vec4;
 import iron.Scene;
 import arm.util.MeshUtil;
 import arm.util.UVUtil;
-import arm.util.ViewportUtil;
+import arm.Viewport;
 import arm.sys.Path;
 import arm.ui.UIHeader;
 import arm.ui.UISidebar;
@@ -23,7 +23,7 @@ class ImportMesh {
 	public static function run(path: String, _clearLayers = true, replaceExisting = true) {
 		if (!Path.isMesh(path)) {
 			if (!Context.enableImportPlugin(path)) {
-				Log.error(Strings.error1());
+				Console.error(Strings.error1());
 				return;
 			}
 		}
@@ -71,7 +71,7 @@ class ImportMesh {
 		}
 		Project.meshAssets = [path];
 
-		ViewportUtil.scaleToBounds();
+		Viewport.scaleToBounds();
 
 		if (Context.paintObject.name == "") Context.paintObject.name = "Object";
 		arm.node.MakeMaterial.parsePaintMaterial();
@@ -90,7 +90,7 @@ class ImportMesh {
 
 	public static function makeMesh(mesh: Dynamic, path: String) {
 		if (mesh == null || mesh.posa == null || mesh.nora == null || mesh.inda == null || mesh.posa.length == 0) {
-			Log.error(Strings.error3());
+			Console.error(Strings.error3());
 			return;
 		}
 
@@ -115,7 +115,10 @@ class ImportMesh {
 			}
 
 			if (clearLayers) {
-				while (Project.layers.length > 0) { var l = Project.layers.pop(); l.unload(); }
+				while (Project.layers.length > 0) {
+					var l = Project.layers.pop();
+					l.unload();
+				}
 				Layers.newLayer(false);
 				iron.App.notifyOnInit(Layers.initLayers);
 				History.reset();
@@ -131,7 +134,6 @@ class ImportMesh {
 			Context.ddirty = 4;
 			UISidebar.inst.hwnd0.redraws = 2;
 			UISidebar.inst.hwnd1.redraws = 2;
-			UISidebar.inst.hwnd2.redraws = 2;
 			UVUtil.uvmapCached = false;
 			UVUtil.trianglemapCached = false;
 			UVUtil.dilatemapCached = false;
@@ -140,17 +142,25 @@ class ImportMesh {
 
 	public static function addMesh(mesh: Dynamic) {
 
-		if (mesh.texa == null) {
-			equirectUnwrap(mesh);
-		}
+		if (mesh.texa == null) equirectUnwrap(mesh);
 		var raw = rawMesh(mesh);
 		raw.vertex_arrays.push({ values: mesh.texa, attrib: "tex", data: "short2norm" });
+		if (mesh.cola != null) raw.vertex_arrays.push({ values: mesh.cola, attrib: "col", data: "short4norm", padding: 1 });
 
 		new MeshData(raw, function(md: MeshData) {
 
 			var object = Scene.active.addMeshObject(md, Context.paintObject.materials, Context.paintObject);
 			object.name = mesh.name;
 			object.skip_context = "paint";
+
+			// Ensure unique names
+			for (p in Project.paintObjects) {
+				if (p.name == object.name) {
+					p.name += ".001";
+					p.data.handle += ".001";
+					Data.cachedMeshes.set(p.data.handle, p.data);
+				}
+			}
 
 			Project.paintObjects.push(object);
 
@@ -166,7 +176,7 @@ class ImportMesh {
 	}
 
 	static function equirectUnwrap(mesh: Dynamic) {
-		Log.error(Strings.error4());
+		Console.error(Strings.error4());
 		var verts = Std.int(mesh.posa.length / 4);
 		mesh.texa = new Int16Array(verts * 2);
 		var n = new Vec4();

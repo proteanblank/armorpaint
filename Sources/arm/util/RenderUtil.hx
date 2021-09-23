@@ -30,6 +30,7 @@ class RenderUtil {
 
 	public static inline var matPreviewSize = 256;
 	public static inline var decalPreviewSize = 512;
+	public static inline var layerPreviewSize = 200;
 	static var screenAlignedFullVB: VertexBuffer = null;
 	static var screenAlignedFullIB: IndexBuffer = null;
 
@@ -51,7 +52,7 @@ class RenderUtil {
 		Scene.active.camera.transform.setMatrix(m);
 		var savedFov = Scene.active.camera.data.raw.fov;
 		Scene.active.camera.data.raw.fov = 0.92;
-		ViewportUtil.updateCameraType(CameraPerspective);
+		Viewport.updateCameraType(CameraPerspective);
 		var light = Scene.active.lights[0];
 		var _lightStrength = light.data.raw.strength;
 		var probe = Scene.active.world.probe;
@@ -88,7 +89,7 @@ class RenderUtil {
 		Context.paintObject = painto;
 
 		Scene.active.camera.transform.setMatrix(Context.savedCamera);
-		ViewportUtil.updateCameraType(Context.cameraType);
+		Viewport.updateCameraType(Context.cameraType);
 		Scene.active.camera.data.raw.fov = savedFov;
 		Scene.active.camera.buildProjection();
 		Scene.active.camera.buildMatrix();
@@ -127,7 +128,7 @@ class RenderUtil {
 		Scene.active.camera.transform.setMatrix(m);
 		var savedFov = Scene.active.camera.data.raw.fov;
 		Scene.active.camera.data.raw.fov = 0.92;
-		ViewportUtil.updateCameraType(CameraPerspective);
+		Viewport.updateCameraType(CameraPerspective);
 		var light = Scene.active.lights[0];
 		light.visible = false;
 		Scene.active.world.envmap = Context.previewEnvmap;
@@ -155,7 +156,7 @@ class RenderUtil {
 
 		Scene.active.camera.transform.setMatrix(Context.savedCamera);
 		Scene.active.camera.data.raw.fov = savedFov;
-		ViewportUtil.updateCameraType(Context.cameraType);
+		Viewport.updateCameraType(Context.cameraType);
 		Scene.active.camera.buildProjection();
 		Scene.active.camera.buildMatrix();
 		var light = Scene.active.lights[0];
@@ -236,7 +237,6 @@ class RenderUtil {
 		// Prepare layers
 		if (RenderPathPaint.liveLayer == null) {
 			RenderPathPaint.liveLayer = new arm.data.LayerSlot("_live");
-			RenderPathPaint.liveLayer.createMask(0xffffffff);
 		}
 
 		var l = RenderPathPaint.liveLayer;
@@ -283,13 +283,14 @@ class RenderUtil {
 		Context.material = new arm.data.MaterialSlot();
 		var _tool = Context.tool;
 		Context.tool = ToolBrush;
-		var _layerIsMask = Context.layerIsMask;
-		Context.layerIsMask = false;
+
+		var _layer = Context.layer;
+		if (Context.layer.isMask()) {
+			Context.layer = Context.layer.parent;
+		}
 
 		var _fill_layer = Context.layer.fill_layer;
-		var _fill_mask = Context.layer.fill_mask;
 		Context.layer.fill_layer = null;
-		Context.layer.fill_mask = null;
 
 		RenderPathPaint.useLiveLayer(true);
 		MakeMaterial.parsePaintMaterial(false);
@@ -314,7 +315,7 @@ class RenderUtil {
 		var cam = Scene.active.camera;
 		Context.savedCamera.setFrom(cam.transform.local);
 		var savedFov = cam.data.raw.fov;
-		ViewportUtil.updateCameraType(CameraPerspective);
+		Viewport.updateCameraType(CameraPerspective);
 		var m = Mat4.identity();
 		m.translate(0, 0, 0.5);
 		cam.transform.setMatrix(m);
@@ -360,7 +361,6 @@ class RenderUtil {
 			Context.lastPaintVecY = pointsY[i - 1];
 			Context.paintVec.x = pointsX[i];
 			Context.paintVec.y = pointsY[i];
-			Context.parseBrushInputs();
 			RenderPathPaint.commandsPaint(false);
 		}
 
@@ -374,14 +374,13 @@ class RenderUtil {
 		Context.prevPaintVecX = -1;
 		Context.prevPaintVecY = -1;
 		Context.pdirty = _pdirty;
-		Context.layer.fill_layer = _fill_layer;
-		Context.layer.fill_mask = _fill_mask;
 		RenderPathPaint.useLiveLayer(false);
+		Context.layer.fill_layer = _fill_layer;
+		Context.layer = _layer;
 		// scons[_si] = _scon;
 		// mcons[_mi] = _mcon;
 		Context.material = _material;
 		Context.tool = _tool;
-		Context.layerIsMask = _layerIsMask;
 		function _init() {
 			MakeMaterial.parsePaintMaterial(false);
 		}
@@ -398,7 +397,7 @@ class RenderUtil {
 		Context.paintObject = painto;
 		Scene.active.camera.transform.setMatrix(Context.savedCamera);
 		Scene.active.camera.data.raw.fov = savedFov;
-		ViewportUtil.updateCameraType(Context.cameraType);
+		Viewport.updateCameraType(Context.cameraType);
 		Scene.active.camera.buildProjection();
 		Scene.active.camera.buildMatrix();
 
@@ -476,24 +475,27 @@ class RenderUtil {
 		Context.paintObject.transform.buildMatrix();
 	}
 
-	public static function pickPositionAndNormal() {
-		Context.pickPosNor = true;
+	public static function pickPosNorTex() {
+		Context.pickPosNorTex = true;
 		Context.pdirty = 1;
 		var _tool = Context.tool;
 		Context.tool = ToolPicker;
-		var _layerIsMask = Context.layerIsMask;
-		Context.layerIsMask = false;
 		MakeMaterial.parsePaintMaterial();
+		if (Context.paint2d) {
+			arm.render.RenderPathPaint.setPlaneMesh();
+		}
 		arm.render.RenderPathPaint.commandsPaint(false);
+		if (Context.paint2d) {
+			arm.render.RenderPathPaint.restorePlaneMesh();
+		}
 		Context.tool = _tool;
-		Context.layerIsMask = _layerIsMask;
-		Context.pickPosNor = false;
+		Context.pickPosNorTex = false;
 		MakeMaterial.parsePaintMaterial();
 		Context.pdirty = 0;
 	}
 
 	public static function getDecalMat(): Mat4 {
-		RenderUtil.pickPositionAndNormal();
+		RenderUtil.pickPosNorTex();
 		var decalMat = Mat4.identity();
 		var loc = new Vec4(Context.posXPicked, Context.posYPicked, Context.posZPicked);
 		var rot = new Quat().fromTo(new Vec4(0.0, 0.0, -1.0), new Vec4(Context.norXPicked, Context.norYPicked, Context.norZPicked));

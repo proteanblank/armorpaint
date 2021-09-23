@@ -12,7 +12,7 @@ import iron.data.Data;
 import iron.object.MeshObject;
 import iron.Scene;
 import arm.util.RenderUtil;
-import arm.util.ViewportUtil;
+import arm.Viewport;
 import arm.sys.File;
 import arm.sys.Path;
 import arm.ui.UISidebar;
@@ -29,6 +29,7 @@ import arm.io.ImportAsset;
 import arm.io.ImportArm;
 import arm.io.ImportBlend;
 import arm.io.ImportMesh;
+import arm.io.ImportTexture;
 import arm.io.ExportArm;
 import arm.node.NodesBrush;
 import arm.ProjectFormat;
@@ -54,9 +55,9 @@ class Project {
 	static var meshList: Array<String> = null;
 
 	public static function projectOpen() {
-		UIFiles.show("arm", false, function(path: String) {
+		UIFiles.show("arm", false, false, function(path: String) {
 			if (!path.endsWith(".arm")) {
-				Log.error(Strings.error0());
+				Console.error(Strings.error0());
 				return;
 			}
 
@@ -101,11 +102,19 @@ class Project {
 
 	public static function projectSave(saveAndQuit = false) {
 		if (filepath == "") {
+			#if krom_ios
+			var documentDirectory = Krom.saveDialog("", "");
+			documentDirectory = documentDirectory.substr(0, documentDirectory.length - 8); // Strip /'untitled'
+			filepath = documentDirectory + "/project" + Config.raw.recent_projects.length + ".arm";
+			#elseif krom_android
+			filepath = Krom.savePath() + "/project" + Config.raw.recent_projects.length + ".arm";
+			#else
 			projectSaveAs();
 			return;
+			#end
 		}
 		var filename = Project.filepath.substring(Project.filepath.lastIndexOf(Path.sep) + 1, Project.filepath.length - 4);
-		Window.get(0).title = filename + " - ArmorPaint";
+		Window.get(0).title = filename + " - " + Main.title;
 
 		function _init() {
 			ExportArm.runProject();
@@ -115,7 +124,7 @@ class Project {
 	}
 
 	public static function projectSaveAs() {
-		UIFiles.show("arm", true, function(path: String) {
+		UIFiles.show("arm", true, false, function(path: String) {
 			var f = UIFiles.filename;
 			if (f == "") f = tr("untitled");
 			filepath = path + Path.sep + f;
@@ -133,7 +142,6 @@ class Project {
 					meshList.unshift("plane");
 					meshList.unshift("sphere");
 					meshList.unshift("rounded_cube");
-
 				}
 
 				ui.row([0.5, 0.5]);
@@ -147,7 +155,7 @@ class Project {
 				}
 				if (ui.button(tr("OK")) || ui.isReturnDown) {
 					Project.projectNew();
-					ViewportUtil.scaleToBounds();
+					Viewport.scaleToBounds();
 					UIBox.show = false;
 					App.redrawUI();
 				}
@@ -156,7 +164,7 @@ class Project {
 	}
 
 	public static function projectNew(resetLayers = true) {
-		Window.get(0).title = "ArmorPaint";
+		Window.get(0).title = Main.title;
 		filepath = "";
 		if (Context.mergedObject != null) {
 			Context.mergedObject.remove();
@@ -164,7 +172,7 @@ class Project {
 			Context.mergedObject = null;
 		}
 
-		ViewportUtil.resetViewport();
+		Viewport.reset();
 		Context.layerPreviewDirty = true;
 		Context.layerFilter = 0;
 		Project.meshAssets = [];
@@ -224,7 +232,7 @@ class Project {
 			Data.cachedMeshes.set("SceneTessellated", md);
 
 			if (Context.projectType == ModelTessellatedPlane) {
-				ViewportUtil.setView(0, 0, 0.75, 0, 0, 0); // Top
+				Viewport.setView(0, 0, 0.75, 0, 0, 0); // Top
 			}
 		}
 
@@ -269,7 +277,6 @@ class Project {
 			Context.ddirty = 4;
 			UISidebar.inst.hwnd0.redraws = 2;
 			UISidebar.inst.hwnd1.redraws = 2;
-			UISidebar.inst.hwnd2.redraws = 2;
 
 			if (resetLayers) {
 				var aspectRatioChanged = layers[0].texpaint.width != Config.getTextureResX() || layers[0].texpaint.height != Config.getTextureResY();
@@ -299,7 +306,7 @@ class Project {
 	}
 
 	public static function importMaterial() {
-		UIFiles.show("arm,blend", false, function(path: String) {
+		UIFiles.show("arm,blend", false, true, function(path: String) {
 			path.endsWith(".blend") ?
 				ImportBlend.runMaterial(path) :
 				ImportArm.runMaterial(path);
@@ -307,7 +314,7 @@ class Project {
 	}
 
 	public static function importBrush() {
-		UIFiles.show("arm," + Path.textureFormats.join(","), false, function(path: String) {
+		UIFiles.show("arm," + Path.textureFormats.join(","), false, true, function(path: String) {
 			// Create brush from texture
 			if (Path.isTexture(path)) {
 				// Import texture
@@ -340,7 +347,6 @@ class Project {
 
 				// Parse brush
 				MakeMaterial.parseBrush();
-				Context.parseBrushInputs();
 				UINodes.inst.hwnd.redraws = 2;
 				function _init() {
 					RenderUtil.makeBrushPreview();
@@ -355,7 +361,7 @@ class Project {
 	}
 
 	public static function importMesh(replaceExisting = true) {
-		UIFiles.show(Path.meshFormats.join(","), false, function(path: String) {
+		UIFiles.show(Path.meshFormats.join(","), false, false, function(path: String) {
 			importMeshBox(path, replaceExisting);
 		});
 	}
@@ -400,7 +406,7 @@ class Project {
 					ImportMesh.run(path, clearLayers, replaceExisting);
 				}
 				if (ui.button(tr("?"))) {
-					File.explorer("https://github.com/armory3d/armorpaint_docs/blob/master/faq.md");
+					File.loadUrl("https://github.com/armory3d/armorpaint_docs/blob/master/faq.md");
 				}
 			}
 		});
@@ -408,7 +414,7 @@ class Project {
 	}
 
 	public static function reimportMesh() {
-		if (Project.meshAssets != null && Project.meshAssets.length > 0) {
+		if (Project.meshAssets != null && Project.meshAssets.length > 0 && File.exists(Project.meshAssets[0])) {
 			importMeshBox(Project.meshAssets[0], true, false);
 		}
 		else importAsset();
@@ -416,24 +422,48 @@ class Project {
 
 	public static function importAsset(filters: String = null, hdrAsEnvmap = true) {
 		if (filters == null) filters = Path.textureFormats.join(",") + "," + Path.meshFormats.join(",");
-		UIFiles.show(filters, false, function(path: String) {
+		UIFiles.show(filters, false, true, function(path: String) {
 			ImportAsset.run(path, -1.0, -1.0, true, hdrAsEnvmap);
 		});
 	}
 
 	public static function importSwatches() {
-		UIFiles.show("arm", false, function(path: String) {
+		UIFiles.show("arm", false, false, function(path: String) {
 			ImportArm.runSwatches(path);
 		});
 	}
 
 	public static function reimportTextures() {
 		for (asset in Project.assets) {
+			reimportTexture(asset);
+		}
+	}
+
+	public static function reimportTexture(asset: TAsset) {
+		function load(path: String) {
+			asset.file = path;
+			var i = Project.assets.indexOf(asset);
 			Data.deleteImage(asset.file);
-			Data.getImage(asset.file, function(image: kha.Image) {
-				Project.assetMap.set(asset.id, image);
+			Project.assetMap.remove(asset.id);
+			Project.assets.splice(i, 1);
+			Project.assetNames.splice(i, 1);
+			ImportTexture.run(asset.file);
+			Project.assets.insert(i, Project.assets.pop());
+			Project.assetNames.insert(i, Project.assetNames.pop());
+			function _next() {
+				arm.node.MakeMaterial.parsePaintMaterial();
+				arm.util.RenderUtil.makeMaterialPreview();
+				UISidebar.inst.hwnd1.redraws = 2;
+			}
+			App.notifyOnNextFrame(_next);
+		}
+		if (!File.exists(asset.file)) {
+			var filters = Path.textureFormats.join(",");
+			UIFiles.show(filters, false, false, function(path: String) {
+				load(path);
 			});
 		}
+		else load(asset.file);
 	}
 
 	public static function getImage(asset: TAsset): Image {
@@ -473,7 +503,7 @@ class Project {
 	}
 
 	public static function exportSwatches() {
-		UIFiles.show("arm", true, function(path: String) {
+		UIFiles.show("arm", true, false, function(path: String) {
 			var f = UIFiles.filename;
 			if (f == "") f = tr("untitled");
 			ExportArm.runSwatches(path + Path.sep + f);
@@ -490,6 +520,11 @@ class Project {
 		Project.raw.swatches = [];
 		var colors = [0xffffffff, 0xff000000, 0xffd6a090, 0xffa12c32, 0xfffa2f7a, 0xfffb9fda, 0xffe61cf7, 0xff992f7c, 0xff47011f, 0xff051155, 0xff4f02ec, 0xff2d69cb, 0xff00a6ee, 0xff6febff, 0xff08a29a, 0xff2a666a, 0xff063619, 0xff4a4957, 0xff8e7ba4, 0xffb7c0ff, 0xffacbe9c, 0xff827c70, 0xff5a3b1c, 0xffae6507, 0xfff7aa30, 0xfff4ea5c, 0xff9b9500, 0xff566204, 0xff11963b, 0xff51e113, 0xff08fdcc];
 		for (c in colors) Project.raw.swatches.push(Project.makeSwatch(c));
+	}
+
+	public static function getMaterialGroupByName(groupName: String): TNodeGroup {
+		for (g in materialGroups) if (g.canvas.name == groupName) return g;
+		return null;
 	}
 }
 

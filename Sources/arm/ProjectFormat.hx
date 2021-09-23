@@ -15,6 +15,7 @@ typedef TProjectFormat = {
 	@:optional public var layer_datas: Array<TLayerData>;
 	@:optional public var mesh_datas: Array<TMeshData>;
 	@:optional public var mesh_assets: Array<String>;
+	@:optional public var mesh_icons: Array<haxe.io.Bytes>;
 	@:optional public var atlas_objects: Array<Int>;
 	@:optional public var atlas_names: Array<String>;
 	@:optional public var swatches: Array<TSwatchColor>;
@@ -34,14 +35,12 @@ typedef TLayerData = {
 	public var texpaint: haxe.io.Bytes;
 	public var texpaint_nor: haxe.io.Bytes;
 	public var texpaint_pack: haxe.io.Bytes;
-	public var texpaint_mask: haxe.io.Bytes;
 	public var uv_scale: Float;
 	public var uv_rot: Float;
 	public var uv_type: Int;
 	public var decal_mat: kha.arrays.Float32Array;
 	public var opacity_mask: Float;
 	public var fill_layer: Int;
-	public var fill_mask: Int;
 	public var object_mask: Int;
 	public var blending: Int;
 	public var parent: Int;

@@ -11,10 +11,10 @@ class TabFonts {
 	@:access(zui.Zui)
 	public static function draw() {
 		var ui = UISidebar.inst.ui;
-		if (ui.tab(UISidebar.inst.htab2, tr("Fonts"))) {
+		if (ui.tab(UIStatus.inst.statustab, tr("Fonts"))) {
 
 			ui.beginSticky();
-			ui.row([1 / 4, 1 / 4]);
+			ui.row([1 / 14, 1 / 14]);
 
 			if (ui.button(tr("Import"))) Project.importAsset("ttf,ttc,otf");
 			if (ui.isHovered) ui.tooltip(tr("Import font file"));
@@ -25,8 +25,9 @@ class TabFonts {
 			ui.endSticky();
 			ui.separator(3, false);
 
+			var statusw = kha.System.windowWidth() - UIToolbar.inst.toolbarw - Config.raw.layout[LayoutSidebarW];
 			var slotw = Std.int(51 * ui.SCALE());
-			var num = Std.int(Config.raw.layout[LayoutSidebarW] / slotw);
+			var num = Std.int(statusw / slotw);
 
 			for (row in 0...Std.int(Math.ceil(Project.fonts.length / num))) {
 				var mult = Config.raw.show_asset_names ? 2 : 1;
@@ -84,6 +85,7 @@ class TabFonts {
 						Context.selectTime = Time.time();
 					}
 					if (ui.isHovered && ui.inputReleasedR) {
+						Context.selectFont(i);
 						var add = Project.fonts.length > 1 ? 1 : 0;
 						var fontName = Project.fonts[i].name;
 						UIMenu.draw(function(ui: Zui) {
@@ -96,11 +98,14 @@ class TabFonts {
 									Project.fonts.splice(i, 1);
 								}
 								iron.App.notifyOnInit(_init);
-								UISidebar.inst.hwnd2.redraws = 2;
+								UIStatus.inst.statusHandle.redraws = 2;
 							}
 						}, 1 + add);
 					}
-					if (ui.isHovered && img != null) ui.tooltipImage(img);
+					if (ui.isHovered && img != null) {
+						ui.tooltipImage(img);
+						ui.tooltip(Project.fonts[i].name);
+					}
 
 					if (Config.raw.show_asset_names) {
 						ui._x = uix;

@@ -24,6 +24,7 @@ import arm.ui.UIToolbar;
 import arm.ui.UINodes;
 import arm.ui.UIView2D;
 import arm.ui.UIHeader;
+import arm.ui.UIStatus;
 import arm.ui.BoxPreferences;
 import arm.node.MakeMaterial;
 import arm.Enums;
@@ -33,14 +34,13 @@ class Context {
 
 	public static var material: MaterialSlot;
 	public static var layer: LayerSlot;
-	public static var layerIsMask = false; // Mask selected for active layer
 	public static var brush: BrushSlot;
 	public static var font: FontSlot;
 	public static var texture: TAsset = null;
 	public static var paintObject: MeshObject;
 	public static var mergedObject: MeshObject = null; // For object mask
 	public static var mergedObjectIsAtlas = false; // Only objects referenced by atlas are merged
-	public static var tool = 0;
+	public static var tool = ToolBrush;
 
 	public static var ddirty = 0; // depth
 	public static var pdirty = 0; // paint
@@ -67,7 +67,7 @@ class Context {
 	public static var uvyPicked = 0.0;
 	public static var pickerSelectMaterial = true;
 	public static var pickerMaskHandle = new Handle();
-	public static var pickPosNor = false;
+	public static var pickPosNorTex = false;
 	public static var posXPicked = 0.0;
 	public static var posYPicked = 0.0;
 	public static var posZPicked = 0.0;
@@ -172,7 +172,9 @@ class Context {
 	public static var brushNodesRadius = 1.0;
 	public static var brushNodesOpacity = 1.0;
 	public static var brushMaskImage: Image = null;
+	public static var brushMaskImageIsAlpha = false;
 	public static var brushStencilImage: Image = null;
+	public static var brushStencilImageIsAlpha = false;
 	public static var brushStencilX = 0.02;
 	public static var brushStencilY = 0.02;
 	public static var brushStencilScale = 0.9;
@@ -220,6 +222,7 @@ class Context {
 	public static var symX = false;
 	public static var symY = false;
 	public static var symZ = false;
+	public static var blurDirectional = false;
 	public static var showCompass = true;
 	public static var fillTypeHandle = new Handle();
 	public static var projectType = ModelRoundedCube;
@@ -252,8 +255,6 @@ class Context {
 	public static var vxaoOffset = 1.5;
 	public static var vxaoAperture = 1.2;
 	public static var textureExportPath = "";
-	public static var lastCombo: Handle = null;
-	public static var lastTooltip: Image = null;
 	public static var lastStatusPosition = 0;
 	public static var cameraControls = ControlsOrbit;
 	public static var dragDestination = 0;
@@ -290,7 +291,6 @@ class Context {
 		if (Project.brushes.indexOf(b) == -1) return;
 		brush = b;
 		MakeMaterial.parseBrush();
-		Context.parseBrushInputs();
 		UISidebar.inst.hwnd1.redraws = 2;
 		UINodes.inst.hwnd.redraws = 2;
 	}
@@ -305,7 +305,7 @@ class Context {
 		font = f;
 		RenderUtil.makeTextPreview();
 		RenderUtil.makeDecalPreview();
-		UISidebar.inst.hwnd2.redraws = 2;
+		UIStatus.inst.statusHandle.redraws = 2;
 		UIView2D.inst.hwnd.redraws = 2;
 	}
 
@@ -318,10 +318,14 @@ class Context {
 		});
 	}
 
-	public static function setLayer(l: LayerSlot, isMask = false) {
-		if (l == layer && layerIsMask == isMask) return;
+	public static function selectLayer(i: Int) {
+		if (Project.layers.length <= i) return;
+		setLayer(Project.layers[i]);
+	}
+
+	public static function setLayer(l: LayerSlot) {
+		if (l == layer) return;
 		layer = l;
-		layerIsMask = isMask;
 		UIHeader.inst.headerHandle.redraws = 2;
 
 		var current = @:privateAccess kha.graphics2.Graphics.current;
@@ -359,6 +363,11 @@ class Context {
 			ParticleUtil.initParticle();
 			MakeMaterial.parseParticleMaterial();
 		}
+
+		#if krom_ios
+		// No hover on iPad, decals are painted by pen release
+		Config.raw.brush_live = decal;
+		#end
 	}
 
 	public static function selectPaintObject(o: MeshObject) {
@@ -366,7 +375,7 @@ class Context {
 		for (p in Project.paintObjects) p.skip_context = "paint";
 		paintObject = o;
 
-		var mask = layer.objectMask;
+		var mask = layer.getObjectMask();
 		if (Context.layerFilterUsed()) mask = Context.layerFilter;
 
 		if (mergedObject == null || mask > 0) {
@@ -422,7 +431,7 @@ class Context {
 		for (f in BoxPreferences.filesPlugin) {
 			if (f.startsWith("import_") && f.indexOf(ext) >= 0) {
 				Config.enablePlugin(f);
-				Log.info(f + " " + tr("plugin enabled"));
+				Console.info(f + " " + tr("plugin enabled"));
 				return true;
 			}
 		}
@@ -434,6 +443,6 @@ class Context {
 	}
 
 	public static function objectMaskUsed(): Bool {
-		return layer.objectMask > 0 && layer.objectMask <= Project.paintObjects.length;
+		return layer.getObjectMask() > 0 && layer.getObjectMask() <= Project.paintObjects.length;
 	}
 }

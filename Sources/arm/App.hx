@@ -30,12 +30,12 @@ import arm.io.ExportTexture;
 import arm.sys.File;
 import arm.sys.Path;
 import arm.util.RenderUtil;
-import arm.util.ViewportUtil;
+import arm.Viewport;
 import arm.data.MaterialSlot;
 import arm.data.LayerSlot;
 import arm.data.ConstData;
-import arm.plugin.Camera;
 import arm.node.MakeMaterial;
+import arm.Camera;
 import arm.Enums;
 import arm.ProjectFormat;
 import arm.Res;
@@ -50,6 +50,7 @@ class App {
 	public static var dragAsset: TAsset = null;
 	public static var dragSwatch: TSwatchColor = null;
 	public static var dragFile: String = null;
+	public static var dragFileIcon: Image = null;
 	public static var dragTint = 0xffffffff;
 	public static var dragSize = -1;
 	public static var dragRect: TRect = null;
@@ -74,7 +75,7 @@ class App {
 	static var lastWindowHeight = 0;
 
 	public function new() {
-		Log.init();
+		Console.init();
 		lastWindowWidth = System.windowWidth();
 		lastWindowHeight = System.windowHeight();
 
@@ -110,7 +111,11 @@ class App {
 				@:privateAccess Input.getKeyboard().upListener(kha.input.KeyCode.Alt);
 				@:privateAccess Input.getKeyboard().upListener(kha.input.KeyCode.Win);
 			},
-			function() {} // Shutdown
+			function() { // Shutdown
+				#if (krom_android || krom_ios)
+				Project.projectSave();
+				#end
+			}
 		);
 
 		Krom.setSaveAndQuitCallback(saveAndQuitCallback);
@@ -272,8 +277,7 @@ class App {
 
 		Config.raw.layout[LayoutNodesW] = Std.int(Config.raw.layout[LayoutNodesW] * ratioW);
 		Config.raw.layout[LayoutSidebarH0] = Std.int(Config.raw.layout[LayoutSidebarH0] * ratioH);
-		Config.raw.layout[LayoutSidebarH1] = Std.int(Config.raw.layout[LayoutSidebarH1] * ratioH);
-		Config.raw.layout[LayoutSidebarH2] = System.windowHeight() - Config.raw.layout[LayoutSidebarH0] - Config.raw.layout[LayoutSidebarH1];
+		Config.raw.layout[LayoutSidebarH1] = System.windowHeight() - Config.raw.layout[LayoutSidebarH0];
 
 		resize();
 
@@ -304,7 +308,7 @@ class App {
 		cam.buildProjection();
 
 		if (Context.cameraType == CameraOrthographic) {
-			ViewportUtil.updateCameraType(Context.cameraType);
+			Viewport.updateCameraType(Context.cameraType);
 		}
 
 		Context.ddirty = 2;
@@ -333,7 +337,6 @@ class App {
 	public static function redrawUI() {
 		UISidebar.inst.hwnd0.redraws = 2;
 		UISidebar.inst.hwnd1.redraws = 2;
-		UISidebar.inst.hwnd2.redraws = 2;
 		UIHeader.inst.headerHandle.redraws = 2;
 		UIToolbar.inst.toolbarHandle.redraws = 2;
 		UIStatus.inst.statusHandle.redraws = 2;
@@ -391,16 +394,7 @@ class App {
 				dragSwatch = null;
 			}
 			else if (dragMaterial != null) {
-				// Material dragged onto viewport or layers tab
-				if (inViewport || inLayers || in2dView) {
-					var uvType = Input.getKeyboard().down("control") ? UVProject : UVMap;
-					var decalMat = uvType == UVProject ? RenderUtil.getDecalMat() : null;
-					Layers.createFillLayer(uvType, decalMat);
-				}
-				else if (inNodes) {
-					UINodes.inst.acceptMaterialDrag(Project.materials.indexOf(dragMaterial));
-				}
-				dragMaterial = null;
+				materialDropped(inViewport, inLayers, inNodes);
 			}
 			else if (dragLayer != null) {
 				if (inNodes) {
@@ -420,18 +414,23 @@ class App {
 				if (!inBrowser) {
 					dropX = mouse.x;
 					dropY = mouse.y;
-					ImportAsset.run(dragFile, dropX, dropY);
+					var materialCount = Project.materials.length;
+					ImportAsset.run(dragFile, dropX, dropY, true, true, function() {
+						// Asset was material
+						if (Project.materials.length > materialCount) {
+							dragMaterial = Context.material;
+							materialDropped(inViewport, inLayers, inNodes);
+						}
+					});
 				}
 				dragFile = null;
+				dragFileIcon = null;
 			}
 			Krom.setMouseCursor(0); // Arrow
 			isDragging = false;
 		}
 
 		handleDropPaths();
-
-		if (UIBox.show) UIBox.update();
-		if (UIMenu.show) UIMenu.update();
 
 		var decal = Context.tool == ToolDecal || Context.tool == ToolText;
 		var isPicker = Context.tool == ToolPicker;
@@ -447,6 +446,19 @@ class App {
 			Context.frame < 3;
 		#end
 		if (Zui.alwaysRedrawWindow && Context.ddirty < 0) Context.ddirty = 0;
+	}
+
+	static function materialDropped(inViewport: Bool, inLayers: Bool, inNodes: Bool) {
+		// Material drag and dropped onto viewport or layers tab
+		if (inViewport || inLayers) {
+			var uvType = Input.getKeyboard().down("control") ? UVProject : UVMap;
+			var decalMat = uvType == UVProject ? RenderUtil.getDecalMat() : null;
+			Layers.createFillLayer(uvType, decalMat);
+		}
+		else if (inNodes) {
+			UINodes.inst.acceptMaterialDrag(Project.materials.indexOf(dragMaterial));
+		}
+		dragMaterial = null;
 	}
 
 	static function handleDropPaths() {
@@ -468,7 +480,7 @@ class App {
 
 	static function getDragBackground(): TRect {
 		var icons = Res.get("icons.k");
-		if (dragLayer != null && dragLayer.getChildren() == null && ((dragLayer.fill_layer == null && !Context.layerIsMask) || (dragLayer.fill_mask == null && Context.layerIsMask))) {
+		if (dragLayer != null && !dragLayer.isGroup() && dragLayer.fill_layer == null) {
 			return Res.tile50(icons, 4, 1);
 		}
 		return null;
@@ -489,10 +501,7 @@ class App {
 		if (dragMaterial != null) {
 			return dragMaterial.imageIcon;
 		}
-		if (dragLayer != null && Context.layerIsMask) {
-			return dragLayer.fill_mask != null ? dragLayer.fill_mask.imageIcon : dragLayer.texpaint_mask_preview;
-		}
-		if (dragLayer != null && dragLayer.getChildren() != null) {
+		if (dragLayer != null && dragLayer.isGroup()) {
 			var icons = Res.get("icons.k");
 			var folderClosed = Res.tile50(icons, 2, 1);
 			var folderOpen = Res.tile50(icons, 8, 1);
@@ -500,14 +509,19 @@ class App {
 			dragTint = UISidebar.inst.ui.t.LABEL_COL - 0x00202020;
 			return icons;
 		}
+		if (dragLayer != null && dragLayer.isMask() && dragLayer.fill_layer == null) {
+			TabLayers.makeMaskPreviewRgba32(dragLayer);
+			return TabLayers.maskPreviewRgba32;
+		}
+		if (dragLayer != null) {
+			return dragLayer.fill_layer != null ? dragLayer.fill_layer.imageIcon : dragLayer.texpaint_preview;
+		}
 		if (dragFile != null) {
+			if (dragFileIcon != null) return dragFileIcon;
 			var icons = Res.get("icons.k");
 			dragRect = dragFile.indexOf(".") > 0 ? Res.tile50(icons, 3, 1) : Res.tile50(icons, 2, 1);
 			dragTint = UISidebar.inst.ui.t.HIGHLIGHT_COL;
 			return icons;
-		}
-		if (dragLayer != null) {
-			return dragLayer.fill_layer != null ? dragLayer.fill_layer.imageIcon : dragLayer.texpaint_preview;
 		}
 		return null;
 	}
@@ -525,7 +539,6 @@ class App {
 				History.undoLayers = [];
 				for (i in 0...Config.raw.undo_steps) {
 					var l = new LayerSlot("_undo" + History.undoLayers.length);
-					l.createMask(0, false);
 					History.undoLayers.push(l);
 				}
 			}
@@ -546,7 +559,7 @@ class App {
 			}
 		}
 		else if (Context.frame == 3) {
-			Context.ddirty = 1;
+			Context.ddirty = Context.renderMode == RenderForward ? 3 : 1;
 		}
 		Context.frame++;
 
@@ -560,7 +573,7 @@ class App {
 			#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
 			var inv = 0;
 			#else
-			var inv = (dragMaterial != null || (dragLayer != null && ((dragLayer.fill_layer != null && !Context.layerIsMask) || (dragLayer.fill_mask != null && Context.layerIsMask)))) ? h : 0;
+			var inv = (dragMaterial != null || (dragLayer != null && dragLayer.fill_layer != null)) ? h : 0;
 			#end
 			g.color = dragTint;
 			var bgRect = getDragBackground();
@@ -577,26 +590,16 @@ class App {
 		if (UIMenu.show) UIMenu.render(g);
 
 		// Save last pos for continuos paint
-		if (mouse.down()) {
-			Context.lastPaintVecX = Context.paintVec.x;
-			Context.lastPaintVecY = Context.paintVec.y;
-		}
-		else {
-			if (Context.splitView) {
-				Context.viewIndex = mouse.viewX > arm.App.w() / 2 ? 1 : 0;
-			}
+		Context.lastPaintVecX = Context.paintVec.x;
+		Context.lastPaintVecY = Context.paintVec.y;
 
-			Context.lastPaintVecX = mouse.viewX / iron.App.w();
-			Context.lastPaintVecY = mouse.viewY / iron.App.h();
-
-			Context.viewIndex = -1;
-
-			#if (krom_android || krom_ios)
-			// No mouse move events for touch, re-init last paint position on touch start
+		#if (krom_android || krom_ios)
+		// No mouse move events for touch, re-init last paint position on touch start
+		if (!mouse.down()) {
 			Context.lastPaintX = -1;
 			Context.lastPaintY = -1;
-			#end
 		}
+		#end
 	}
 
 	public static function enumTexts(nodeType: String): Array<String> {
@@ -637,6 +640,12 @@ class App {
 
 	public static function toggleFullscreen() {
 		if (kha.Window.get(0).mode == kha.WindowMode.Windowed) {
+			#if (krom_windows || krom_linux || krom_darwin)
+			Config.raw.window_w = System.windowWidth();
+			Config.raw.window_h = System.windowHeight();
+			Config.raw.window_x = kha.Window.get(0).x;
+			Config.raw.window_y = kha.Window.get(0).y;
+			#end
 			kha.Window.get(0).mode = kha.WindowMode.Fullscreen;
 		}
 		else {
@@ -644,5 +653,85 @@ class App {
 			kha.Window.get(0).resize(Config.raw.window_w, Config.raw.window_h);
 			kha.Window.get(0).move(Config.raw.window_x, Config.raw.window_y);
 		}
+	}
+
+	public static function isScrolling(): Bool {
+		for (ui in getUIs()) if (ui.isScrolling) return true;
+		return false;
+	}
+
+	public static function isComboSelected(): Bool {
+		for (ui in getUIs()) if (@:privateAccess ui.comboSelectedHandle != null) return true;
+		return false;
+	}
+
+	public static function getUIs(): Array<Zui> {
+		return [App.uiBox, App.uiMenu, arm.ui.UISidebar.inst.ui, arm.ui.UINodes.inst.ui, arm.ui.UIView2D.inst.ui];
+	}
+
+	public static function isDecalLayer(): Bool {
+		var isPaint = UIHeader.inst.worktab.position == SpacePaint;
+		return isPaint && Context.layer.fill_layer != null && Context.layer.uvType == UVProject;
+	}
+
+	public static function redrawStatus() {
+		if (arm.ui.UIStatus.inst != null) {
+			arm.ui.UIStatus.inst.statusHandle.redraws = 2;
+		}
+	}
+
+	public static function redrawConsole() {
+		var statush = Config.raw.layout[LayoutStatusH];
+		if (arm.ui.UIStatus.inst != null && arm.ui.UISidebar.inst != null && arm.ui.UISidebar.inst.ui != null && statush > arm.ui.UIStatus.defaultStatusH * arm.ui.UISidebar.inst.ui.SCALE()) {
+			arm.ui.UIStatus.inst.statusHandle.redraws = 2;
+		}
+	}
+
+	public static function initLayout() {
+		var show2d = (UINodes.inst != null && UINodes.inst.show) || (UIView2D.inst != null && UIView2D.inst.show);
+		var raw = Config.raw;
+		raw.layout = [
+			Std.int(UISidebar.defaultWindowW * raw.window_scale),
+			Std.int(kha.System.windowHeight() / 2),
+			Std.int(kha.System.windowHeight() / 2),
+			show2d ? Std.int((iron.App.w() + raw.layout[LayoutNodesW]) / 2) : Std.int(iron.App.w() / 2),
+			Std.int(iron.App.h() / 2),
+			Std.int(UIStatus.defaultStatusH * raw.window_scale)
+		];
+	}
+
+	public static function initConfig() {
+		var raw = Config.raw;
+		raw.recent_projects = [];
+		raw.bookmarks = [];
+		raw.plugins = [];
+		raw.keymap = "default.json";
+		raw.theme = "default.json";
+		raw.server = "https://armorpaint.fra1.digitaloceanspaces.com";
+		raw.undo_steps = 4;
+		raw.pressure_radius = true;
+		raw.pressure_hardness = true;
+		raw.pressure_angle = false;
+		raw.pressure_opacity = false;
+		raw.pressure_sensitivity = 1.0;
+		#if kha_vulkan
+		raw.material_live = false;
+		#else
+		raw.material_live = true;
+		#end
+		raw.brush_3d = true;
+		raw.brush_depth_reject = true;
+		raw.brush_angle_reject = true;
+		raw.brush_live = false;
+		raw.camera_speed = 1.0;
+		raw.zoom_direction = ZoomVertical;
+		raw.displace_strength = 0.0;
+		raw.show_asset_names = false;
+		raw.wrap_mouse = false;
+		raw.node_preview = true;
+		raw.workspace = 0;
+		raw.layer_res = Res2048;
+		raw.dilate = DilateInstant;
+		raw.dilate_radius = 2;
 	}
 }
