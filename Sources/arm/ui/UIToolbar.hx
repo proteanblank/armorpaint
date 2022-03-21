@@ -3,6 +3,8 @@ package arm.ui;
 import kha.System;
 import zui.Zui;
 import arm.Enums;
+import iron.RenderPath;
+import arm.Translator._tr;
 
 class UIToolbar {
 
@@ -14,18 +16,18 @@ class UIToolbar {
 	public var toolbarw = defaultToolbarW;
 
 	public var toolNames = [
-		tr("Brush"),
-		tr("Eraser"),
-		tr("Fill"),
-		tr("Decal"),
-		tr("Text"),
-		tr("Clone"),
-		tr("Blur"),
-		tr("Particle"),
-		tr("ColorID"),
-		tr("Picker"),
-		tr("Gizmo"),
-		tr("Bake")
+		_tr("Brush"),
+		_tr("Eraser"),
+		_tr("Fill"),
+		_tr("Decal"),
+		_tr("Text"),
+		_tr("Clone"),
+		_tr("Blur"),
+		_tr("Particle"),
+		_tr("ColorID"),
+		_tr("Picker"),
+		_tr("Gizmo"),
+		_tr("Bake")
 	];
 	var toolCount = [10, 2, 1, 1];
 
@@ -55,11 +57,11 @@ class UIToolbar {
 
 			if (UIHeader.inst.worktab.position == SpacePaint) {
 				var keys = [
-					"(" + Config.keymap.tool_brush + ")",
-					"(" + Config.keymap.tool_eraser + ")",
+					"(" + Config.keymap.tool_brush + ") - " + tr("Hold {action_paint} to paint\nHold {key} and press {action_paint} to paint a straight line (ruler mode)", ["key" => Config.keymap.brush_ruler, "action_paint" => Config.keymap.action_paint]),
+					"(" + Config.keymap.tool_eraser + ") - " + tr("Hold {action_paint} to erase\nHold {key} and press {action_paint} to erase a straight line (ruler mode)", ["key" => Config.keymap.brush_ruler, "action_paint" => Config.keymap.action_paint]),
 					"(" + Config.keymap.tool_fill + ")",
-					"(" + Config.keymap.tool_decal + ")",
-					"(" + Config.keymap.tool_text + ")",
+					"(" + Config.keymap.tool_decal + ") - " + tr("Hold {key} to paint on a decal mask", ["key" => Config.keymap.decal_mask]),
+					"(" + Config.keymap.tool_text + ") - " + tr("Hold {key} to use the text as a mask", ["key" => Config.keymap.decal_mask]),
 					"(" + Config.keymap.tool_clone + ") - " + tr("Hold {key} to set source", ["key" => Config.keymap.set_clone_source]),
 					"(" + Config.keymap.tool_blur + ")",
 					"(" + Config.keymap.tool_particle + ")",
@@ -71,7 +73,11 @@ class UIToolbar {
 					ui._x += 2;
 					if (Context.tool == i) ui.fill(-1, 2, 32 + 2, 32 + 2, ui.t.HIGHLIGHT_COL);
 					var rect = Res.tile50(img, i, 0);
+					var _y = ui._y;
 					if (ui.image(img, iconAccent, null, rect.x, rect.y, rect.w, rect.h) == State.Started) Context.selectTool(i);
+					if (i == 8 && Context.colorIdPicked) {
+						ui.g.drawScaledSubImage(RenderPath.active.renderTargets.get("texpaint_colorid").image, 0, 0, 1, 1, 0, _y + 1.5 * ui.SCALE(), 5 * ui.SCALE(), 34 * ui.SCALE());
+					}
 					if (ui.isHovered) ui.tooltip(tr(toolNames[i]) + " " + keys[i]);
 					ui._x -= 2;
 					ui._y += 2;

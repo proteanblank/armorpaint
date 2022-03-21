@@ -24,18 +24,23 @@ class BoxPreferences {
 	public static var presetHandle: Handle;
 	static var locales: Array<String> = null;
 	static var themes: Array<String> = null;
-	static var worldColor = kha.Color.fromValue(0xff030303);
+	static var worldColor = kha.Color.fromValue(0xff020202);
 
 	@:access(zui.Zui)
 	public static function show() {
+
 		UIBox.showCustom(function(ui: Zui) {
+			#if arm_touchui
+			alignToLeftSide();
+			#end
+
 			if (ui.tab(htab, tr("Interface"), true)) {
 
 				if (locales == null) {
 					locales = Translator.getSupportedLocales();
 				}
 
-				var localeHandle = Id.handle({position: locales.indexOf(Config.raw.locale)});
+				var localeHandle = Id.handle({ position: locales.indexOf(Config.raw.locale) });
 				ui.combo(localeHandle, locales, tr("Language"), true);
 				if (localeHandle.changed) {
 					var localeCode = locales[localeHandle.position];
@@ -44,7 +49,7 @@ class BoxPreferences {
 					UISidebar.inst.tagUIRedraw();
 				}
 
-				var hscale = Id.handle({value: Config.raw.window_scale});
+				var hscale = Id.handle({ value: Config.raw.window_scale });
 				ui.slider(hscale, tr("UI Scale"), 1.0, 4.0, true, 10);
 				if (!hscale.changed && Context.hscaleWasChanged) {
 					if (hscale.value == null || Math.isNaN(hscale.value)) hscale.value = 1.0;
@@ -53,33 +58,42 @@ class BoxPreferences {
 				}
 				Context.hscaleWasChanged = hscale.changed;
 
-				var hspeed = Id.handle({value: Config.raw.camera_speed});
-				Config.raw.camera_speed = ui.slider(hspeed, tr("Camera Speed"), 0.1, 4.0, true);
+				var hspeed = Id.handle({ value: Config.raw.camera_zoom_speed });
+				Config.raw.camera_zoom_speed = ui.slider(hspeed, tr("Camera Zoom Speed"), 0.1, 4.0, true);
 
-				var zoomDirectionHandle = Id.handle({position: Config.raw.zoom_direction});
+				hspeed = Id.handle({ value: Config.raw.camera_rotation_speed });
+				Config.raw.camera_rotation_speed = ui.slider(hspeed, tr("Camera Rotation Speed"), 0.1, 4.0, true);
+
+				hspeed = Id.handle({ value: Config.raw.camera_pan_speed });
+				Config.raw.camera_pan_speed = ui.slider(hspeed, tr("Camera Pan Speed"), 0.1, 4.0, true);
+
+				var zoomDirectionHandle = Id.handle({ position: Config.raw.zoom_direction });
 				ui.combo(zoomDirectionHandle, [tr("Vertical"), tr("Vertical Inverted"), tr("Horizontal"), tr("Horizontal Inverted"), tr("Vertical and Horizontal"), tr("Vertical and Horizontal Inverted")], tr("Direction to Zoom"), true);
 				if (zoomDirectionHandle.changed) {
 					Config.raw.zoom_direction = zoomDirectionHandle.position;
 				}
 
-				Config.raw.node_preview = ui.check(Id.handle({selected: Config.raw.node_preview}), tr("Show Node Preview"));
+				Config.raw.wrap_mouse = ui.check(Id.handle({ selected: Config.raw.wrap_mouse }), tr("Wrap Mouse"));
+				if (ui.isHovered) ui.tooltip(tr("Wrap mouse around view boundaries during camera control"));
+
+				Config.raw.node_preview = ui.check(Id.handle({ selected: Config.raw.node_preview }), tr("Show Node Preview"));
 
 				#if arm_debug
-				Context.cacheDraws = ui.check(Id.handle({selected: Context.cacheDraws}), tr("Cache UI Draws"));
+				Context.cacheDraws = ui.check(Id.handle({ selected: Context.cacheDraws }), tr("Cache UI Draws"));
 				if (ui.isHovered) ui.tooltip(tr("Enabling may reduce GPU usage"));
 				#end
 
 				ui.changed = false;
-				Config.raw.show_asset_names = ui.check(Id.handle({selected: Config.raw.show_asset_names}), tr("Show Asset Names"));
+				Config.raw.show_asset_names = ui.check(Id.handle({ selected: Config.raw.show_asset_names }), tr("Show Asset Names"));
 				if (ui.changed) {
 					UISidebar.inst.tagUIRedraw();
 				}
 
 				// ui.text("Node Editor");
-				// var gridSnap = ui.check(Id.handle({selected: false}), "Grid Snap");
+				// var gridSnap = ui.check(Id.handle({ selected: false }), "Grid Snap");
 
 				ui.endElement();
-				ui.row([0.5]);
+				ui.row([0.5, 0.5]);
 				if (ui.button(tr("Restore"))) {
 					UIMenu.draw(function(ui: Zui) {
 						ui.text(tr("Restore defaults?"), Right, ui.t.HIGHLIGHT_COL);
@@ -96,7 +110,7 @@ class BoxPreferences {
 							});
 						}
 						if (ui.button(tr("Import..."), Left)) {
-							UIFiles.show("arm", false, function(path: String) {
+							UIFiles.show("arm", false, false, function(path: String) {
 								Data.getBlob(path, function(b: kha.Blob) {
 									var raw = Json.parse(b.toString());
 									iron.App.notifyOnInit(function() {
@@ -111,6 +125,15 @@ class BoxPreferences {
 						}
 					}, 3);
 				}
+				if (ui.button(tr("Reset Layout"))) {
+					UIMenu.draw(function(ui: Zui) {
+						ui.text(tr("Reset layout?"), Right, ui.t.HIGHLIGHT_COL);
+						if (ui.button(tr("Confirm"), Left)) {
+							App.initLayout();
+							Config.save();
+						}
+					}, 2);
+				}
 			}
 
 			if (ui.tab(htab, tr("Theme"), true)) {
@@ -118,7 +141,7 @@ class BoxPreferences {
 				if (themes == null) {
 					fetchThemes();
 				}
-				themeHandle = Id.handle({position: getThemeIndex()});
+				themeHandle = Id.handle({ position: getThemeIndex() });
 
 				ui.beginSticky();
 				ui.row([1 / 4, 1 / 4, 1 / 4, 1 / 4]);
@@ -133,7 +156,7 @@ class BoxPreferences {
 					UIBox.showCustom(function(ui: Zui) {
 						if (ui.tab(Id.handle(), tr("New Theme"))) {
 							ui.row([0.5, 0.5]);
-							var themeName = ui.textInput(Id.handle({text: "new_theme"}), tr("Name"));
+							var themeName = ui.textInput(Id.handle({ text: "new_theme" }), tr("Name"));
 							if (ui.button(tr("OK")) || ui.isReturnDown) {
 								var template = Json.stringify(arm.App.theme);
 								if (!themeName.endsWith(".json")) themeName += ".json";
@@ -152,13 +175,13 @@ class BoxPreferences {
 				}
 
 				if (ui.button(tr("Import"))) {
-					UIFiles.show("json", false, function(path: String) {
+					UIFiles.show("json", false, false, function(path: String) {
 						ImportTheme.run(path);
 					});
 				}
 
 				if (ui.button(tr("Export"))) {
-					UIFiles.show("json", true, function(path) {
+					UIFiles.show("json", true, false, function(path) {
 						path += Path.sep + UIFiles.filename;
 						if (!path.endsWith(".json")) path += ".json";
 						Krom.fileSaveBytes(path, Bytes.ofString(Json.stringify(arm.App.theme)).getData());
@@ -177,11 +200,10 @@ class BoxPreferences {
 				ui.text("", 0, h.color);
 				if (ui.isHovered && ui.inputReleased) {
 					UIMenu.draw(function(ui) {
-						ui.fill(0, 0, ui._w / ui.SCALE(), ui.t.ELEMENT_H * 9, ui.t.SEPARATOR_COL);
 						ui.changed = false;
-						zui.Ext.colorWheel(ui, h, false, null, false);
+						zui.Ext.colorWheel(ui, h, false, null, 11 * ui.t.ELEMENT_H * ui.SCALE(), true);
 						if (ui.changed) UIMenu.keepOpen = true;
-					}, 3);
+					}, 11);
 				}
 				var val = untyped h.color;
 				if (val < 0) val += untyped 4294967296;
@@ -218,15 +240,14 @@ class BoxPreferences {
 						if (ui.isHovered && ui.inputReleased) {
 							h.color = untyped theme[key];
 							UIMenu.draw(function(ui) {
-								ui.fill(0, 0, ui._w / ui.SCALE(), ui.t.ELEMENT_H * 9, ui.t.SEPARATOR_COL);
 								ui.changed = false;
-								untyped theme[key] = zui.Ext.colorWheel(ui, h, false, null, false);
+								untyped theme[key] = zui.Ext.colorWheel(ui, h, false, null, 11 * ui.t.ELEMENT_H * ui.SCALE(), true);
 								if (ui.changed) UIMenu.keepOpen = true;
-							}, 3);
+							}, 11);
 						}
 					}
 
-					if (Std.is(val, Bool)) {
+					if (Std.isOfType(val, Bool)) {
 						h.selected = val;
 						untyped theme[key] = ui.check(h, key);
 					}
@@ -245,14 +266,13 @@ class BoxPreferences {
 			}
 
 			if (ui.tab(htab, tr("Usage"), true)) {
-				Context.undoHandle = Id.handle({value: Config.raw.undo_steps});
+				Context.undoHandle = Id.handle({ value: Config.raw.undo_steps });
 				Config.raw.undo_steps = Std.int(ui.slider(Context.undoHandle, tr("Undo Steps"), 1, 64, false, 1));
 				if (Config.raw.undo_steps < 1) Config.raw.undo_steps = Std.int(Context.undoHandle.value = 1);
 				if (Context.undoHandle.changed) {
 					ui.g.end();
 					while (History.undoLayers.length < Config.raw.undo_steps) {
 						var l = new LayerSlot("_undo" + History.undoLayers.length);
-						l.createMask(0, false);
 						History.undoLayers.push(l);
 					}
 					while (History.undoLayers.length > Config.raw.undo_steps) {
@@ -263,56 +283,60 @@ class BoxPreferences {
 					ui.g.begin(false);
 				}
 
-				Config.raw.dilate_radius = Std.int(ui.slider(Id.handle({value: Config.raw.dilate_radius}), tr("Dilate Radius"), 0.0, 16.0, true, 1));
+				Config.raw.dilate_radius = Std.int(ui.slider(Id.handle({ value: Config.raw.dilate_radius }), tr("Dilate Radius"), 0.0, 16.0, true, 1));
 				if (ui.isHovered) ui.tooltip(tr("Dilate painted textures to prevent seams"));
 
-				var dilateHandle = Id.handle({position: Config.raw.dilate});
+				var dilateHandle = Id.handle({ position: Config.raw.dilate });
 				ui.combo(dilateHandle, [tr("Instant"), tr("Delayed")], tr("Dilate"), true);
 				if (dilateHandle.changed) {
 					Config.raw.dilate = dilateHandle.position;
 				}
 
-				var workspaceHandle = Id.handle({position: Config.raw.workspace});
+				var workspaceHandle = Id.handle({ position: Config.raw.workspace });
 				ui.combo(workspaceHandle, [tr("Paint"), tr("Material"), tr("Bake")], tr("Default Workspace"), true);
 				if (workspaceHandle.changed) {
 					Config.raw.workspace = workspaceHandle.position;
 				}
 
-				var layerResHandle = Id.handle({position: Config.raw.layer_res});
+				var layerResHandle = Id.handle({ position: Config.raw.layer_res });
+				#if (krom_android || krom_ios)
+				ui.combo(layerResHandle, ["128", "256", "512", "1K", "2K", "4K"], tr("Default Layer Resolution"), true);
+				#else
 				ui.combo(layerResHandle, ["128", "256", "512", "1K", "2K", "4K", "8K"], tr("Default Layer Resolution"), true);
+				#end
 				if (layerResHandle.changed) {
 					Config.raw.layer_res = layerResHandle.position;
 				}
 
-				var serverHandle = Id.handle({text: Config.raw.server});
+				var serverHandle = Id.handle({ text: Config.raw.server });
 				Config.raw.server = ui.textInput(serverHandle, tr("Cloud Server"));
 
-				var materialLiveHandle = Id.handle({selected: Config.raw.material_live});
+				var materialLiveHandle = Id.handle( {selected: Config.raw.material_live });
 				Config.raw.material_live = ui.check(materialLiveHandle, tr("Live Material Preview"));
 				if (ui.isHovered) ui.tooltip(tr("Instantly update material preview on node change"));
 
-				var brushLiveHandle = Id.handle({selected: Config.raw.brush_live});
+				var brushLiveHandle = Id.handle({ selected: Config.raw.brush_live });
 				Config.raw.brush_live = ui.check(brushLiveHandle, tr("Live Brush Preview"));
 				if (ui.isHovered) ui.tooltip(tr("Draw live brush preview in viewport"));
 				if (brushLiveHandle.changed) Context.ddirty = 2;
 
-				var brush3dHandle = Id.handle({selected: Config.raw.brush_3d});
+				var brush3dHandle = Id.handle({ selected: Config.raw.brush_3d });
 				Config.raw.brush_3d = ui.check(brush3dHandle, tr("3D Cursor"));
 				if (brush3dHandle.changed) MakeMaterial.parsePaintMaterial();
 
 				ui.enabled = Config.raw.brush_3d;
-				var brushDepthRejectHandle = Id.handle({selected: Config.raw.brush_depth_reject});
+				var brushDepthRejectHandle = Id.handle({ selected: Config.raw.brush_depth_reject });
 				Config.raw.brush_depth_reject = ui.check(brushDepthRejectHandle, tr("Depth Reject"));
 				if (brushDepthRejectHandle.changed) MakeMaterial.parsePaintMaterial();
 
 				ui.row([0.5, 0.5]);
 
-				var brushAngleRejectHandle = Id.handle({selected: Config.raw.brush_angle_reject});
+				var brushAngleRejectHandle = Id.handle({ selected: Config.raw.brush_angle_reject });
 				Config.raw.brush_angle_reject = ui.check(brushAngleRejectHandle, tr("Angle Reject"));
 				if (brushAngleRejectHandle.changed) MakeMaterial.parsePaintMaterial();
 
 				if (!Config.raw.brush_angle_reject) ui.enabled = false;
-				var angleDotHandle = Id.handle({value: Context.brushAngleRejectDot});
+				var angleDotHandle = Id.handle({ value: Context.brushAngleRejectDot });
 				Context.brushAngleRejectDot = ui.slider(angleDotHandle, tr("Angle"), 0.0, 1.0, true);
 				if (angleDotHandle.changed) {
 					MakeMaterial.parsePaintMaterial();
@@ -320,32 +344,36 @@ class BoxPreferences {
 				ui.enabled = true;
 			}
 
+			#if krom_ios
+			if (ui.tab(htab, tr("Pencil"), true)) {
+			#else
 			if (ui.tab(htab, tr("Pen"), true)) {
+			#end
 				ui.text(tr("Pressure controls"));
-				Config.raw.pressure_radius = ui.check(Id.handle({selected: Config.raw.pressure_radius}), tr("Brush Radius"));
-				Config.raw.pressure_hardness = ui.check(Id.handle({selected: Config.raw.pressure_hardness}), tr("Brush Hardness"));
-				Config.raw.pressure_opacity = ui.check(Id.handle({selected: Config.raw.pressure_opacity}), tr("Brush Opacity"));
-				Config.raw.pressure_angle = ui.check(Id.handle({selected: Config.raw.pressure_angle}), tr("Brush Angle"));
-				Config.raw.pressure_sensitivity = ui.slider(Id.handle({value: Config.raw.pressure_sensitivity}), tr("Sensitivity"), 0.0, 2.0, true);
+				Config.raw.pressure_radius = ui.check(Id.handle({ selected: Config.raw.pressure_radius }), tr("Brush Radius"));
+				Config.raw.pressure_hardness = ui.check(Id.handle({ selected: Config.raw.pressure_hardness }), tr("Brush Hardness"));
+				Config.raw.pressure_opacity = ui.check(Id.handle({ selected: Config.raw.pressure_opacity }), tr("Brush Opacity"));
+				Config.raw.pressure_angle = ui.check(Id.handle({ selected: Config.raw.pressure_angle }), tr("Brush Angle"));
+				Config.raw.pressure_sensitivity = ui.slider(Id.handle({ value: Config.raw.pressure_sensitivity }), tr("Sensitivity"), 0.0, 2.0, true);
 
 				ui.endElement();
 				ui.row([0.5]);
 				if (ui.button(tr("Help"))) {
-					File.explorer("https://github.com/armory3d/armorpaint_docs#pen");
+					File.loadUrl("https://github.com/armory3d/armorpaint_docs#pen");
 				}
 			}
 
-			Context.hssgi = Id.handle({selected: Config.raw.rp_ssgi});
-			Context.hssr = Id.handle({selected: Config.raw.rp_ssr});
-			Context.hbloom = Id.handle({selected: Config.raw.rp_bloom});
-			Context.hsupersample = Id.handle({position: Config.getSuperSampleQuality(Config.raw.rp_supersample)});
-			Context.hvxao = Id.handle({selected: Config.raw.rp_gi});
+			Context.hssgi = Id.handle({ selected: Config.raw.rp_ssgi });
+			Context.hssr = Id.handle({ selected: Config.raw.rp_ssr });
+			Context.hbloom = Id.handle({ selected: Config.raw.rp_bloom });
+			Context.hsupersample = Id.handle({ position: Config.getSuperSampleQuality(Config.raw.rp_supersample) });
+			Context.hvxao = Id.handle({ selected: Config.raw.rp_gi });
 			if (ui.tab(htab, tr("Viewport"), true)) {
 				#if (!arm_vr)
 
 				#if (kha_direct3d12 || kha_vulkan)
 
-				var hpathtracemode = Id.handle({position: Context.pathTraceMode});
+				var hpathtracemode = Id.handle({ position: Context.pathTraceMode });
 				Context.pathTraceMode = ui.combo(hpathtracemode, [tr("Core"), tr("Full")], tr("Path Tracer"), true);
 				if (hpathtracemode.changed) {
 					arm.render.RenderPathRaytrace.ready = false;
@@ -353,7 +381,7 @@ class BoxPreferences {
 
 				#else
 
-				var hrendermode = Id.handle({position: Context.renderMode});
+				var hrendermode = Id.handle({ position: Context.renderMode });
 				Context.renderMode = ui.combo(hrendermode, [tr("Full"), tr("Mobile")], tr("Renderer"), true);
 				if (hrendermode.changed) {
 					Context.setRenderPath();
@@ -367,7 +395,7 @@ class BoxPreferences {
 				if (Context.hsupersample.changed) Config.applyConfig();
 
 				#if arm_debug
-				var vsyncHandle = Id.handle({selected: Config.raw.window_vsync});
+				var vsyncHandle = Id.handle({ selected: Config.raw.window_vsync });
 				Config.raw.window_vsync = ui.check(vsyncHandle, tr("VSync"));
 				#end
 
@@ -380,10 +408,10 @@ class BoxPreferences {
 					}
 
 					ui.enabled = Context.hvxao.selected;
-					var h = Id.handle({value: Context.vxaoOffset});
+					var h = Id.handle({ value: Context.vxaoOffset });
 					Context.vxaoOffset = ui.slider(h, tr("Cone Offset"), 1.0, 4.0, true);
 					if (h.changed) Context.ddirty = 2;
-					var h = Id.handle({value: Context.vxaoAperture});
+					var h = Id.handle({ value: Context.vxaoAperture });
 					Context.vxaoAperture = ui.slider(h, tr("Aperture"), 1.0, 4.0, true);
 					if (h.changed) Context.ddirty = 2;
 					ui.enabled = true;
@@ -396,11 +424,11 @@ class BoxPreferences {
 					if (Context.hbloom.changed) Config.applyConfig();
 				}
 
-				var h = Id.handle({value: Config.raw.rp_vignette});
+				var h = Id.handle({ value: Config.raw.rp_vignette });
 				Config.raw.rp_vignette = ui.slider(h, tr("Vignette"), 0.0, 1.0, true);
 				if (h.changed) Context.ddirty = 2;
 
-				// var h = Id.handle({value: Context.autoExposureStrength});
+				// var h = Id.handle({ value: Context.autoExposureStrength });
 				// Context.autoExposureStrength = ui.slider(h, "Auto Exposure", 0.0, 2.0, true);
 				// if (h.changed) Context.ddirty = 2;
 
@@ -416,7 +444,7 @@ class BoxPreferences {
 					cam.buildProjection();
 				}
 
-				var dispHandle = Id.handle({value: Config.raw.displace_strength});
+				var dispHandle = Id.handle({ value: Config.raw.displace_strength });
 				Config.raw.displace_strength = ui.slider(dispHandle, tr("Displacement Strength"), 0.0, 10.0, true);
 				if (dispHandle.changed) {
 					Context.ddirty = 2;
@@ -432,7 +460,7 @@ class BoxPreferences {
 				ui.beginSticky();
 				ui.row([1 / 2, 1 / 4, 1 / 4]);
 
-				presetHandle = Id.handle({position: getPresetIndex()});
+				presetHandle = Id.handle({ position: getPresetIndex() });
 				ui.combo(presetHandle, filesKeymap, tr("Preset"));
 				if (presetHandle.changed) {
 					Config.raw.keymap = filesKeymap[presetHandle.position] + ".json";
@@ -441,12 +469,12 @@ class BoxPreferences {
 				}
 
 				if (ui.button(tr("Import"))) {
-					UIFiles.show("json", false, function(path: String) {
+					UIFiles.show("json", false, false, function(path: String) {
 						ImportKeymap.run(path);
 					});
 				}
 				if (ui.button(tr("Export"))) {
-					UIFiles.show("json", true, function(dest: String) {
+					UIFiles.show("json", true, false, function(dest: String) {
 						if (!UIFiles.filename.endsWith(".json")) UIFiles.filename += ".json";
 						var path = Path.data() + Path.sep + "keymap_presets" + Path.sep + Config.raw.keymap;
 						File.copy(path, dest + Path.sep + UIFiles.filename);
@@ -477,7 +505,7 @@ class BoxPreferences {
 					UIBox.showCustom(function(ui: Zui) {
 						if (ui.tab(Id.handle(), tr("New Plugin"))) {
 							ui.row([0.5, 0.5]);
-							var pluginName = ui.textInput(Id.handle({text: "new_plugin"}), tr("Name"));
+							var pluginName = ui.textInput(Id.handle({ text: "new_plugin" }), tr("Name"));
 							if (ui.button(tr("OK")) || ui.isReturnDown) {
 								var template =
 "let plugin = new arm.Plugin();
@@ -485,7 +513,7 @@ let h1 = new zui.Handle();
 plugin.drawUI = function(ui) {
 	if (ui.panel(h1, 'New Plugin')) {
 		if (ui.button('Button')) {
-			arm.Log.error('Hello');
+			console.error('Hello');
 		}
 	}
 }
@@ -503,7 +531,7 @@ plugin.drawUI = function(ui) {
 					});
 				}
 				if (ui.button(tr("Import"))) {
-					UIFiles.show("js,wasm,zip", false, function(path: String) {
+					UIFiles.show("js,wasm,zip", false, false, function(path: String) {
 						ImportPlugin.run(path);
 					});
 				}
@@ -514,7 +542,7 @@ plugin.drawUI = function(ui) {
 				}
 
 				if (Config.raw.plugins == null) Config.raw.plugins = [];
-				var h = Id.handle({selected: false});
+				var h = Id.handle({ selected: false });
 				for (f in filesPlugin) {
 					var isJs = f.endsWith(".js");
 					var isWasm = false; //f.endsWith(".wasm");
@@ -538,12 +566,12 @@ plugin.drawUI = function(ui) {
 								iron.data.Data.getBlob("plugins/" + f, function(blob: kha.Blob) {
 									TabScript.hscript.text = blob.toString();
 									iron.data.Data.deleteBlob("plugins/" + f);
-									Log.info("Script opened");
+									Console.info("Script opened");
 								});
 
 							}
 							if (ui.button(tr("Export"), Left)) {
-								UIFiles.show("js", true, function(dest: String) {
+								UIFiles.show("js", true, false, function(dest: String) {
 									if (!UIFiles.filename.endsWith(".js")) UIFiles.filename += ".js";
 									File.copy(path, dest + Path.sep + UIFiles.filename);
 								});
@@ -562,6 +590,18 @@ plugin.drawUI = function(ui) {
 			}
 		}, 600, 400, function() { Config.save(); });
 	}
+
+	#if arm_touchui
+	static function alignToLeftSide() {
+		@:privateAccess UIBox.modalH = Std.int((kha.System.windowHeight() - UIHeader.inst.headerh) / App.uiBox.SCALE());
+		var appw = kha.System.windowWidth();
+		var apph = kha.System.windowHeight();
+		var mw = @:privateAccess Std.int(UIBox.modalW * App.uiBox.SCALE());
+		var mh = @:privateAccess Std.int(UIBox.modalH * App.uiBox.SCALE());
+		UIBox.hwnd.dragX = Std.int(-appw / 2 + mw / 2);
+		UIBox.hwnd.dragY = Std.int(-apph / 2 + mh / 2 + UIHeader.inst.headerh);
+	}
+	#end
 
 	public static function fetchThemes() {
 		themes = File.readDirectory(Path.data() + Path.sep + "themes");

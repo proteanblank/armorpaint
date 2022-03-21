@@ -98,6 +98,11 @@ package arm;
 	var ExportPerUdimTile = 3;
 }
 
+@:enum abstract ExportDestination(Int) from Int to Int {
+	var DestinationDisk = 0;
+	var DestinationPacked = 1;
+}
+
 #if (kha_direct3d12 || kha_vulkan)
 @:enum abstract PathTraceMode(Int) from Int to Int {
 	var TraceCore = 0;
@@ -109,6 +114,7 @@ package arm;
 	var FillObject = 0;
 	var FillFace = 1;
 	var FillAngle = 2;
+	var FillUVIsland = 3;
 }
 
 @:enum abstract UVType(Int) from Int to Int {
@@ -203,6 +209,7 @@ package arm;
 	var View2DLayer = 0;
 	var View2DAsset = 1;
 	var View2DFont = 2;
+	var View2DNode = 3;
 }
 
 @:enum abstract View2DLayerMode(Int) from Int to Int {
@@ -238,10 +245,9 @@ package arm;
 	var LayoutSidebarW = 0;
 	var LayoutSidebarH0 = 1;
 	var LayoutSidebarH1 = 2;
-	var LayoutSidebarH2 = 3;
-	var LayoutNodesW = 4;
-	var LayoutNodesH = 5;
-	var LayoutStatusH = 6;
+	var LayoutNodesW = 3;
+	var LayoutNodesH = 4;
+	var LayoutStatusH = 5;
 }
 
 @:enum abstract ZoomDirection(Int) from Int to Int {
@@ -251,4 +257,10 @@ package arm;
 	var ZoomHorizontalInverted = 3;
 	var ZoomVerticalAndHorizontal = 4;
 	var ZoomVerticalAndHorizontalInverted = 5;
+}
+
+@:enum abstract LayerSlotType(Int) from Int to Int {
+	var SlotLayer = 0;
+	var SlotMask = 1;
+	var SlotGroup = 2;
 }

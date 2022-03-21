@@ -1,5 +1,6 @@
 package arm;
 
+import arm.ui.TabMaterials;
 import haxe.io.Bytes;
 import kha.graphics2.truetype.StbTruetype;
 import kha.Image;
@@ -30,12 +31,12 @@ import arm.io.ExportTexture;
 import arm.sys.File;
 import arm.sys.Path;
 import arm.util.RenderUtil;
-import arm.util.ViewportUtil;
+import arm.Viewport;
 import arm.data.MaterialSlot;
 import arm.data.LayerSlot;
 import arm.data.ConstData;
-import arm.plugin.Camera;
 import arm.node.MakeMaterial;
+import arm.Camera;
 import arm.Enums;
 import arm.ProjectFormat;
 import arm.Res;
@@ -50,6 +51,7 @@ class App {
 	public static var dragAsset: TAsset = null;
 	public static var dragSwatch: TSwatchColor = null;
 	public static var dragFile: String = null;
+	public static var dragFileIcon: Image = null;
 	public static var dragTint = 0xffffffff;
 	public static var dragSize = -1;
 	public static var dragRect: TRect = null;
@@ -60,6 +62,7 @@ class App {
 	public static var font: Font = null;
 	public static var theme: TTheme;
 	public static var colorWheel: Image;
+	public static var blackWhiteGradient: Image;
 	public static var uiBox: Zui;
 	public static var uiMenu: Zui;
 	public static var defaultElementW = 100;
@@ -74,7 +77,7 @@ class App {
 	static var lastWindowHeight = 0;
 
 	public function new() {
-		Log.init();
+		Console.init();
 		lastWindowWidth = System.windowWidth();
 		lastWindowHeight = System.windowHeight();
 
@@ -91,10 +94,10 @@ class App {
 			dropPath = dropPath.rtrim();
 			dropPaths.push(dropPath);
 			#end
-			#if krom_ios
+			// #if krom_ios
 			// Import immediately while access to resource is unlocked
-			handleDropPaths();
-			#end
+			// handleDropPaths();
+			// #end
 		});
 
 		System.notifyOnApplicationState(
@@ -110,81 +113,96 @@ class App {
 				@:privateAccess Input.getKeyboard().upListener(kha.input.KeyCode.Alt);
 				@:privateAccess Input.getKeyboard().upListener(kha.input.KeyCode.Win);
 			},
-			function() {} // Shutdown
+			function() { // Shutdown
+				#if (krom_android || krom_ios)
+				Project.projectSave();
+				#end
+			}
 		);
 
 		Krom.setSaveAndQuitCallback(saveAndQuitCallback);
 
 		Data.getFont("font.ttf", function(f: Font) {
-			Data.getImage("color_wheel.k", function(image: Image) {
+			Data.getImage("color_wheel.k", function(imageColorWheel: Image) {
+				Data.getImage("black_white_gradient.k", function(imageBlackWhiteGradient: Image) {
+					font = f;
+					Config.loadTheme(Config.raw.theme, false);
+					defaultElementW = theme.ELEMENT_W;
+					defaultFontSize = theme.FONT_SIZE;
+					Translator.loadTranslations(Config.raw.locale);
+					UIFiles.filename = tr("untitled");
+					#if (krom_android || krom_ios)
+					kha.Window.get(0).title = tr("untitled");
+					#end
 
-				font = f;
-				Config.loadTheme(Config.raw.theme, false);
-				defaultElementW = theme.ELEMENT_W;
-				defaultFontSize = theme.FONT_SIZE;
-				Translator.loadTranslations(Config.raw.locale);
-				UIFiles.filename = tr("untitled");
-
-				// Precompiled font for fast startup
-				if (Config.raw.locale == "en") {
-					var kimg: kha.Font.KravurImage = js.lib.Object.create(untyped kha.Font.KravurImage.prototype);
-					@:privateAccess kimg.mySize = 13;
-					@:privateAccess kimg.width = 128;
-					@:privateAccess kimg.height = 128;
-					@:privateAccess kimg.baseline = 10;
-					var chars = new haxe.ds.Vector(ConstData.font_x0.length);
-					kha.graphics2.Graphics.fontGlyphs = [for (i in 32...127) i];
-					for (i in 0...95) chars[i] = new Stbtt_bakedchar();
-					for (i in 0...ConstData.font_x0.length) chars[i].x0 = ConstData.font_x0[i];
-					for (i in 0...ConstData.font_y0.length) chars[i].y0 = ConstData.font_y0[i];
-					for (i in 0...ConstData.font_x1.length) chars[i].x1 = ConstData.font_x1[i];
-					for (i in 0...ConstData.font_y1.length) chars[i].y1 = ConstData.font_y1[i];
-					for (i in 0...ConstData.font_xoff.length) chars[i].xoff = ConstData.font_xoff[i];
-					for (i in 0...ConstData.font_yoff.length) chars[i].yoff = ConstData.font_yoff[i];
-					for (i in 0...ConstData.font_xadvance.length) chars[i].xadvance = ConstData.font_xadvance[i];
-					@:privateAccess kimg.chars = chars;
-					Data.getBlob("font13.bin", function(fontbin: kha.Blob) {
-						@:privateAccess kimg.texture = Image.fromBytes(fontbin.toBytes(), 128, 128, kha.graphics4.TextureFormat.L8);
-						@:privateAccess cast(font, kha.Font).images.set(130095, kimg);
-					});
-				}
-
-				colorWheel = image;
-				Nodes.enumTexts = enumTexts;
-				Nodes.tr = tr;
-				uiBox = new Zui({ theme: App.theme, font: f, scaleFactor: Config.raw.window_scale, color_wheel: colorWheel });
-				uiMenu = new Zui({ theme: App.theme, font: f, scaleFactor: Config.raw.window_scale, color_wheel: colorWheel });
-				defaultElementH = uiMenu.t.ELEMENT_H;
-
-				// Init plugins
-				if (Config.raw.plugins != null) {
-					for (plugin in Config.raw.plugins) {
-						Plugin.start(plugin);
+					// Precompiled font for fast startup
+					if (Config.raw.locale == "en") {
+						var kimg: kha.Font.KravurImage = js.lib.Object.create(untyped kha.Font.KravurImage.prototype);
+						@:privateAccess kimg.mySize = 13;
+						@:privateAccess kimg.width = 128;
+						@:privateAccess kimg.height = 128;
+						@:privateAccess kimg.baseline = 10;
+						var chars = new haxe.ds.Vector(ConstData.font_x0.length);
+						kha.graphics2.Graphics.fontGlyphs = [for (i in 32...127) i];
+						for (i in 0...95) chars[i] = new Stbtt_bakedchar();
+						for (i in 0...ConstData.font_x0.length) chars[i].x0 = ConstData.font_x0[i];
+						for (i in 0...ConstData.font_y0.length) chars[i].y0 = ConstData.font_y0[i];
+						for (i in 0...ConstData.font_x1.length) chars[i].x1 = ConstData.font_x1[i];
+						for (i in 0...ConstData.font_y1.length) chars[i].y1 = ConstData.font_y1[i];
+						for (i in 0...ConstData.font_xoff.length) chars[i].xoff = ConstData.font_xoff[i];
+						for (i in 0...ConstData.font_yoff.length) chars[i].yoff = ConstData.font_yoff[i];
+						for (i in 0...ConstData.font_xadvance.length) chars[i].xadvance = ConstData.font_xadvance[i];
+						@:privateAccess kimg.chars = chars;
+						Data.getBlob("font13.bin", function(fontbin: kha.Blob) {
+							@:privateAccess kimg.texture = Image.fromBytes(fontbin.toBytes(), 128, 128, kha.graphics4.TextureFormat.L8);
+							@:privateAccess cast(font, kha.Font).images.set(130095, kimg);
+						});
 					}
-				}
 
-				Args.parse();
+					colorWheel = imageColorWheel;
+					blackWhiteGradient = imageBlackWhiteGradient;
+					Nodes.enumTexts = enumTexts;
+					Nodes.tr = tr;
+					uiBox = new Zui({ theme: App.theme, font: f, scaleFactor: Config.raw.window_scale, color_wheel: colorWheel, black_white_gradient: blackWhiteGradient });
+					uiMenu = new Zui({ theme: App.theme, font: f, scaleFactor: Config.raw.window_scale, color_wheel: colorWheel, black_white_gradient: blackWhiteGradient });
+					defaultElementH = uiMenu.t.ELEMENT_H;
 
-				iron.App.notifyOnUpdate(update);
-				new UISidebar();
-				new UINodes();
-				new UIView2D();
-				new Camera();
-				iron.App.notifyOnRender2D(UIView2D.inst.render);
-				iron.App.notifyOnUpdate(UIView2D.inst.update);
-				iron.App.notifyOnRender2D(UISidebar.inst.renderCursor);
-				iron.App.notifyOnUpdate(UINodes.inst.update);
-				iron.App.notifyOnRender2D(UINodes.inst.render);
-				iron.App.notifyOnUpdate(UISidebar.inst.update);
-				iron.App.notifyOnRender2D(UISidebar.inst.render);
-				iron.App.notifyOnRender2D(render);
-				appx = UIToolbar.inst.toolbarw;
-				appy = UIHeader.inst.headerh * 2;
-				var cam = Scene.active.camera;
-				cam.data.raw.fov = Std.int(cam.data.raw.fov * 100) / 100;
-				cam.buildProjection();
+					// Init plugins
+					if (Config.raw.plugins != null) {
+						for (plugin in Config.raw.plugins) {
+							Plugin.start(plugin);
+						}
+					}
 
-				Args.run();
+					Args.parse();
+
+					iron.App.notifyOnUpdate(update);
+					new UISidebar();
+					new UINodes();
+					new UIView2D();
+					new Camera();
+					iron.App.notifyOnRender2D(UIView2D.inst.render);
+					iron.App.notifyOnUpdate(UIView2D.inst.update);
+					iron.App.notifyOnRender2D(UISidebar.inst.renderCursor);
+					iron.App.notifyOnUpdate(UINodes.inst.update);
+					iron.App.notifyOnRender2D(UINodes.inst.render);
+					iron.App.notifyOnUpdate(UISidebar.inst.update);
+					iron.App.notifyOnRender2D(UISidebar.inst.render);
+					iron.App.notifyOnRender2D(render);
+					appx = UIToolbar.inst.toolbarw;
+					appy = UIHeader.inst.headerh * 2;
+					var cam = Scene.active.camera;
+					cam.data.raw.fov = Std.int(cam.data.raw.fov * 100) / 100;
+					cam.buildProjection();
+
+					Args.run();
+
+					#if arm_touchui
+					if (Config.raw.recent_projects.length > 0) {
+						arm.ui.BoxProjects.show();
+					}
+					#end
+				});
 			});
 		});
 	}
@@ -272,8 +290,7 @@ class App {
 
 		Config.raw.layout[LayoutNodesW] = Std.int(Config.raw.layout[LayoutNodesW] * ratioW);
 		Config.raw.layout[LayoutSidebarH0] = Std.int(Config.raw.layout[LayoutSidebarH0] * ratioH);
-		Config.raw.layout[LayoutSidebarH1] = Std.int(Config.raw.layout[LayoutSidebarH1] * ratioH);
-		Config.raw.layout[LayoutSidebarH2] = System.windowHeight() - Config.raw.layout[LayoutSidebarH0] - Config.raw.layout[LayoutSidebarH1];
+		Config.raw.layout[LayoutSidebarH1] = System.windowHeight() - Config.raw.layout[LayoutSidebarH0];
 
 		resize();
 
@@ -304,7 +321,7 @@ class App {
 		cam.buildProjection();
 
 		if (Context.cameraType == CameraOrthographic) {
-			ViewportUtil.updateCameraType(Context.cameraType);
+			Viewport.updateCameraType(Context.cameraType);
 		}
 
 		Context.ddirty = 2;
@@ -333,7 +350,6 @@ class App {
 	public static function redrawUI() {
 		UISidebar.inst.hwnd0.redraws = 2;
 		UISidebar.inst.hwnd1.redraws = 2;
-		UISidebar.inst.hwnd2.redraws = 2;
 		UIHeader.inst.headerHandle.redraws = 2;
 		UIToolbar.inst.toolbarHandle.redraws = 2;
 		UIStatus.inst.statusHandle.redraws = 2;
@@ -341,6 +357,7 @@ class App {
 		UIMenubar.inst.workspaceHandle.redraws = 2;
 		UINodes.inst.hwnd.redraws = 2;
 		UIView2D.inst.hwnd.redraws = 2;
+		UIBox.hwnd.redraws = 2;
 		if (Context.ddirty < 0) Context.ddirty = 0; // Redraw viewport
 		if (Context.splitView) Context.ddirty = 1;
 	}
@@ -363,12 +380,18 @@ class App {
 							 Context.paintVec.y < 1 && Context.paintVec.y > 0;
 			var inLayers = UISidebar.inst.htab0.position == 0 &&
 						   mx > UISidebar.inst.tabx && my < Config.raw.layout[LayoutSidebarH0];
+			var inMaterials = UISidebar.inst.htab1.position == 0 &&
+						   mx > UISidebar.inst.tabx && my > Config.raw.layout[LayoutSidebarH0] && my < Config.raw.layout[LayoutSidebarH1] + Config.raw.layout[LayoutSidebarH0];
 			var in2dView = UIView2D.inst.show && UIView2D.inst.type == View2DLayer &&
 						   mx > UIView2D.inst.wx && mx < UIView2D.inst.wx + UIView2D.inst.ww &&
 						   my > UIView2D.inst.wy && my < UIView2D.inst.wy + UIView2D.inst.wh;
 			var inNodes = UINodes.inst.show &&
 						  mx > UINodes.inst.wx && mx < UINodes.inst.wx + UINodes.inst.ww &&
 						  my > UINodes.inst.wy && my < UINodes.inst.wy + UINodes.inst.wh;
+			var inSwatches = UIStatus.inst.statustab.position == 4 && 
+						  mx > iron.App.x() && mx < iron.App.x() + System.windowWidth() - UIToolbar.inst.toolbarw - Config.raw.layout[LayoutSidebarW] &&
+						  my > System.windowHeight() - Config.raw.layout[LayoutStatusH];
+
 			if (dragAsset != null) {
 				if (inNodes) { // Create image texture
 					UINodes.inst.acceptAssetDrag(Project.assets.indexOf(dragAsset));
@@ -386,21 +409,24 @@ class App {
 			}
 			else if (dragSwatch != null) {
 				if (inNodes) { // Create RGB node
-					UINodes.inst.acceptSwatchDrag(Project.raw.swatches.indexOf(dragSwatch));
+					UINodes.inst.acceptSwatchDrag(dragSwatch);
+				}
+				else if (inMaterials) {
+					TabMaterials.acceptSwatchDrag(dragSwatch);
+				}
+				else if (inLayers || inViewport) {
+					var color = dragSwatch.base;
+					color.A = dragSwatch.opacity;
+
+					Layers.createColorLayer(color.value, dragSwatch.occlusion, dragSwatch.roughness, dragSwatch.metallic);
+				}
+				else if (inSwatches) {
+					TabSwatches.acceptSwatchDrag(dragSwatch);
 				}
 				dragSwatch = null;
 			}
 			else if (dragMaterial != null) {
-				// Material dragged onto viewport or layers tab
-				if (inViewport || inLayers || in2dView) {
-					var uvType = Input.getKeyboard().down("control") ? UVProject : UVMap;
-					var decalMat = uvType == UVProject ? RenderUtil.getDecalMat() : null;
-					Layers.createFillLayer(uvType, decalMat);
-				}
-				else if (inNodes) {
-					UINodes.inst.acceptMaterialDrag(Project.materials.indexOf(dragMaterial));
-				}
-				dragMaterial = null;
+				materialDropped(inViewport, inLayers, inNodes);
 			}
 			else if (dragLayer != null) {
 				if (inNodes) {
@@ -420,18 +446,27 @@ class App {
 				if (!inBrowser) {
 					dropX = mouse.x;
 					dropY = mouse.y;
-					ImportAsset.run(dragFile, dropX, dropY);
+					var materialCount = Project.materials.length;
+					ImportAsset.run(dragFile, dropX, dropY, true, true, function() {
+						// Asset was material
+						if (Project.materials.length > materialCount) {
+							dragMaterial = Context.material;
+							materialDropped(inViewport, inLayers, inNodes);
+						}
+					});
 				}
 				dragFile = null;
+				dragFileIcon = null;
 			}
 			Krom.setMouseCursor(0); // Arrow
 			isDragging = false;
 		}
+		if (Context.colorPickerCallback != null && (mouse.released() || mouse.released("right"))) {
+			Context.colorPickerCallback = null;
+			Context.selectTool(Context.colorPickerPreviousTool);
+		}
 
 		handleDropPaths();
-
-		if (UIBox.show) UIBox.update();
-		if (UIMenu.show) UIMenu.update();
 
 		var decal = Context.tool == ToolDecal || Context.tool == ToolText;
 		var isPicker = Context.tool == ToolPicker;
@@ -447,6 +482,19 @@ class App {
 			Context.frame < 3;
 		#end
 		if (Zui.alwaysRedrawWindow && Context.ddirty < 0) Context.ddirty = 0;
+	}
+
+	static function materialDropped(inViewport: Bool, inLayers: Bool, inNodes: Bool) {
+		// Material drag and dropped onto viewport or layers tab
+		if (inViewport || inLayers) {
+			var uvType = Input.getKeyboard().down("control") ? UVProject : UVMap;
+			var decalMat = uvType == UVProject ? RenderUtil.getDecalMat() : null;
+			Layers.createFillLayer(uvType, decalMat);
+		}
+		else if (inNodes) {
+			UINodes.inst.acceptMaterialDrag(Project.materials.indexOf(dragMaterial));
+		}
+		dragMaterial = null;
 	}
 
 	static function handleDropPaths() {
@@ -468,7 +516,7 @@ class App {
 
 	static function getDragBackground(): TRect {
 		var icons = Res.get("icons.k");
-		if (dragLayer != null && dragLayer.getChildren() == null && ((dragLayer.fill_layer == null && !Context.layerIsMask) || (dragLayer.fill_mask == null && Context.layerIsMask))) {
+		if (dragLayer != null && !dragLayer.isGroup() && dragLayer.fill_layer == null) {
 			return Res.tile50(icons, 4, 1);
 		}
 		return null;
@@ -489,10 +537,7 @@ class App {
 		if (dragMaterial != null) {
 			return dragMaterial.imageIcon;
 		}
-		if (dragLayer != null && Context.layerIsMask) {
-			return dragLayer.fill_mask != null ? dragLayer.fill_mask.imageIcon : dragLayer.texpaint_mask_preview;
-		}
-		if (dragLayer != null && dragLayer.getChildren() != null) {
+		if (dragLayer != null && dragLayer.isGroup()) {
 			var icons = Res.get("icons.k");
 			var folderClosed = Res.tile50(icons, 2, 1);
 			var folderOpen = Res.tile50(icons, 8, 1);
@@ -500,14 +545,19 @@ class App {
 			dragTint = UISidebar.inst.ui.t.LABEL_COL - 0x00202020;
 			return icons;
 		}
+		if (dragLayer != null && dragLayer.isMask() && dragLayer.fill_layer == null) {
+			TabLayers.makeMaskPreviewRgba32(dragLayer);
+			return Context.maskPreviewRgba32;
+		}
+		if (dragLayer != null) {
+			return dragLayer.fill_layer != null ? dragLayer.fill_layer.imageIcon : dragLayer.texpaint_preview;
+		}
 		if (dragFile != null) {
+			if (dragFileIcon != null) return dragFileIcon;
 			var icons = Res.get("icons.k");
 			dragRect = dragFile.indexOf(".") > 0 ? Res.tile50(icons, 3, 1) : Res.tile50(icons, 2, 1);
 			dragTint = UISidebar.inst.ui.t.HIGHLIGHT_COL;
 			return icons;
-		}
-		if (dragLayer != null) {
-			return dragLayer.fill_layer != null ? dragLayer.fill_layer.imageIcon : dragLayer.texpaint_preview;
 		}
 		return null;
 	}
@@ -525,7 +575,6 @@ class App {
 				History.undoLayers = [];
 				for (i in 0...Config.raw.undo_steps) {
 					var l = new LayerSlot("_undo" + History.undoLayers.length);
-					l.createMask(0, false);
 					History.undoLayers.push(l);
 				}
 			}
@@ -546,7 +595,7 @@ class App {
 			}
 		}
 		else if (Context.frame == 3) {
-			Context.ddirty = 1;
+			Context.ddirty = Context.renderMode == RenderForward ? 3 : 1;
 		}
 		Context.frame++;
 
@@ -560,7 +609,7 @@ class App {
 			#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
 			var inv = 0;
 			#else
-			var inv = (dragMaterial != null || (dragLayer != null && ((dragLayer.fill_layer != null && !Context.layerIsMask) || (dragLayer.fill_mask != null && Context.layerIsMask)))) ? h : 0;
+			var inv = (dragMaterial != null || (dragLayer != null && dragLayer.fill_layer != null)) ? h : 0;
 			#end
 			g.color = dragTint;
 			var bgRect = getDragBackground();
@@ -577,26 +626,16 @@ class App {
 		if (UIMenu.show) UIMenu.render(g);
 
 		// Save last pos for continuos paint
-		if (mouse.down()) {
-			Context.lastPaintVecX = Context.paintVec.x;
-			Context.lastPaintVecY = Context.paintVec.y;
-		}
-		else {
-			if (Context.splitView) {
-				Context.viewIndex = mouse.viewX > arm.App.w() / 2 ? 1 : 0;
-			}
+		Context.lastPaintVecX = Context.paintVec.x;
+		Context.lastPaintVecY = Context.paintVec.y;
 
-			Context.lastPaintVecX = mouse.viewX / iron.App.w();
-			Context.lastPaintVecY = mouse.viewY / iron.App.h();
-
-			Context.viewIndex = -1;
-
-			#if (krom_android || krom_ios)
-			// No mouse move events for touch, re-init last paint position on touch start
+		#if (krom_android || krom_ios)
+		// No mouse move events for touch, re-init last paint position on touch start
+		if (!mouse.down()) {
 			Context.lastPaintX = -1;
 			Context.lastPaintY = -1;
-			#end
 		}
+		#end
 	}
 
 	public static function enumTexts(nodeType: String): Array<String> {
@@ -637,6 +676,12 @@ class App {
 
 	public static function toggleFullscreen() {
 		if (kha.Window.get(0).mode == kha.WindowMode.Windowed) {
+			#if (krom_windows || krom_linux || krom_darwin)
+			Config.raw.window_w = System.windowWidth();
+			Config.raw.window_h = System.windowHeight();
+			Config.raw.window_x = kha.Window.get(0).x;
+			Config.raw.window_y = kha.Window.get(0).y;
+			#end
 			kha.Window.get(0).mode = kha.WindowMode.Fullscreen;
 		}
 		else {
@@ -644,5 +689,87 @@ class App {
 			kha.Window.get(0).resize(Config.raw.window_w, Config.raw.window_h);
 			kha.Window.get(0).move(Config.raw.window_x, Config.raw.window_y);
 		}
+	}
+
+	public static function isScrolling(): Bool {
+		for (ui in getUIs()) if (ui.isScrolling) return true;
+		return false;
+	}
+
+	public static function isComboSelected(): Bool {
+		for (ui in getUIs()) if (@:privateAccess ui.comboSelectedHandle != null) return true;
+		return false;
+	}
+
+	public static function getUIs(): Array<Zui> {
+		return [App.uiBox, App.uiMenu, arm.ui.UISidebar.inst.ui, arm.ui.UINodes.inst.ui, arm.ui.UIView2D.inst.ui];
+	}
+
+	public static function isDecalLayer(): Bool {
+		var isPaint = UIHeader.inst.worktab.position == SpacePaint;
+		return isPaint && Context.layer.fill_layer != null && Context.layer.uvType == UVProject;
+	}
+
+	public static function redrawStatus() {
+		if (arm.ui.UIStatus.inst != null) {
+			arm.ui.UIStatus.inst.statusHandle.redraws = 2;
+		}
+	}
+
+	public static function redrawConsole() {
+		var statush = Config.raw.layout[LayoutStatusH];
+		if (arm.ui.UIStatus.inst != null && arm.ui.UISidebar.inst != null && arm.ui.UISidebar.inst.ui != null && statush > arm.ui.UIStatus.defaultStatusH * arm.ui.UISidebar.inst.ui.SCALE()) {
+			arm.ui.UIStatus.inst.statusHandle.redraws = 2;
+		}
+	}
+
+	public static function initLayout() {
+		var show2d = (UINodes.inst != null && UINodes.inst.show) || (UIView2D.inst != null && UIView2D.inst.show);
+		var raw = Config.raw;
+		raw.layout = [
+			Std.int(UISidebar.defaultWindowW * raw.window_scale),
+			Std.int(kha.System.windowHeight() / 2),
+			Std.int(kha.System.windowHeight() / 2),
+			show2d ? Std.int((iron.App.w() + raw.layout[LayoutNodesW]) / 2) : Std.int(iron.App.w() / 2),
+			Std.int(iron.App.h() / 2),
+			Std.int(UIStatus.defaultStatusH * raw.window_scale)
+		];
+	}
+
+	public static function initConfig() {
+		var raw = Config.raw;
+		raw.recent_projects = [];
+		raw.bookmarks = [];
+		raw.plugins = [];
+		raw.keymap = "default.json";
+		raw.theme = "default.json";
+		raw.server = "https://armorpaint.fra1.digitaloceanspaces.com";
+		raw.undo_steps = 4;
+		raw.pressure_radius = true;
+		raw.pressure_hardness = true;
+		raw.pressure_angle = false;
+		raw.pressure_opacity = false;
+		raw.pressure_sensitivity = 1.0;
+		#if kha_vulkan
+		raw.material_live = false;
+		#else
+		raw.material_live = true;
+		#end
+		raw.brush_3d = true;
+		raw.brush_depth_reject = true;
+		raw.brush_angle_reject = true;
+		raw.brush_live = false;
+		raw.camera_zoom_speed = 1.0;
+		raw.camera_pan_speed = 1.0;
+		raw.camera_rotation_speed = 1.0;
+		raw.zoom_direction = ZoomVertical;
+		raw.displace_strength = 0.0;
+		raw.show_asset_names = false;
+		raw.wrap_mouse = false;
+		raw.node_preview = true;
+		raw.workspace = 0;
+		raw.layer_res = Res2048;
+		raw.dilate = DilateInstant;
+		raw.dilate_radius = 2;
 	}
 }

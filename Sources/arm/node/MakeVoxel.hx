@@ -14,13 +14,13 @@ class MakeVoxel {
 		data.raw.vertex_elements = [{name: "pos", data: "short4norm"}, {name: "nor", data: "short2norm"}, {name: "tex", data: "short2norm"}];
 
 		// #if arm_skin
-		// var isMesh = Std.is(Context.object, MeshObject);
+		// var isMesh = Std.isOfType(Context.object, MeshObject);
 		// var skin = isMesh && cast(Context.object, MeshObject).data.geom.bones != null;
 		// if (skin) {
 		// 	structure.add("bone", kha.graphics4.VertexData.Short4Norm);
 		// 	structure.add("weight", kha.graphics4.VertexData.Short4Norm);
-		// 	data.raw.vertex_elements.push({name: "bone", data: 'short4norm'});
-		// 	data.raw.vertex_elements.push({name: "weight", data: 'short4norm'});
+		// 	data.raw.vertex_elements.push({ name: "bone", data: 'short4norm' });
+		// 	data.raw.vertex_elements.push({ name: "weight", data: 'short4norm' });
 		// }
 		// #end
 
@@ -66,7 +66,7 @@ class MakeVoxel {
 		pipeState.compile();
 		data.raw.constants = [{ name: "W", type: "mat4", link: "_worldMatrix" }, { name: "N", type: "mat3", link: "_normalMatrix" }];
 		data.constants = [pipeState.getConstantLocation("W"), pipeState.getConstantLocation("N")];
-		data.raw.texture_units = [{name: "texpaint_pack"}, {name: "voxels", is_image: true}];
+		data.raw.texture_units = [{ name: "texpaint_pack" }, { name: "voxels", is_image: true }];
 		data.textureUnits = [pipeState.getTextureUnit("texpaint_pack"), pipeState.getTextureUnit("voxels")];
 	}
 	#end

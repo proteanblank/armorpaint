@@ -21,7 +21,6 @@ class TabBrushes {
 				Context.brush = new BrushSlot();
 				Project.brushes.push(Context.brush);
 				MakeMaterial.parseBrush();
-				Context.parseBrushInputs();
 				UINodes.inst.hwnd.redraws = 2;
 			}
 			if (ui.button(tr("Import"))) {
@@ -80,6 +79,7 @@ class TabBrushes {
 						// App.dragBrush = Context.brush;
 					}
 					if (ui.isHovered && ui.inputReleasedR) {
+						Context.selectBrush(i);
 						var add = Project.brushes.length > 1 ? 1 : 0;
 						UIMenu.draw(function(ui: Zui) {
 							//var b = Project.brushes[i];
@@ -102,14 +102,27 @@ class TabBrushes {
 								iron.App.notifyOnInit(_init);
 							}
 
-							if (Project.brushes.length > 1 && ui.button(tr("Delete"), Left)) {
-								Context.selectBrush(i == 0 ? 1 : 0);
-								Project.brushes.splice(i, 1);
-								UISidebar.inst.hwnd1.redraws = 2;
+							if (Project.brushes.length > 1 && ui.button(tr("Delete"), Left, "delete")) {
+								deleteBrush(Project.brushes[i]);
 							}
 						}, 3 + add);
 					}
-					if (ui.isHovered && imgFull != null) ui.tooltipImage(imgFull);
+
+					if (ui.isHovered) {
+						if (imgFull == null) {
+							iron.App.notifyOnInit(function() {
+								var _brush = Context.brush;
+								Context.brush = Project.brushes[i];
+								MakeMaterial.parseBrush();
+								RenderUtil.makeBrushPreview();
+								Context.brush = _brush;
+							});
+						}
+						else {
+							ui.tooltipImage(imgFull);
+							ui.tooltip(Project.brushes[i].canvas.name);
+						}
+					}
 
 					if (Config.raw.show_asset_names) {
 						ui._x = uix;
@@ -125,6 +138,20 @@ class TabBrushes {
 
 				ui._y += 6;
 			}
+
+			var inFocus = ui.inputX > ui._windowX && ui.inputX < ui._windowX + ui._windowW &&
+						  ui.inputY > ui._windowY && ui.inputY < ui._windowY + ui._windowH;
+			if (inFocus && ui.isDeleteDown && Project.brushes.length > 1) {
+				ui.isDeleteDown = false;
+				deleteBrush(Context.brush);
+			}
 		}
+	}
+
+	static function deleteBrush(b: BrushSlot) {
+		var i = Project.brushes.indexOf(b);
+		Context.selectBrush(i == Project.brushes.length - 1 ? i - 1 : i + 1);
+		Project.brushes.splice(i, 1);
+		UISidebar.inst.hwnd1.redraws = 2;
 	}
 }

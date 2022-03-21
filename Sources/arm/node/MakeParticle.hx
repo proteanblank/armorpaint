@@ -59,6 +59,7 @@ class MakeParticle {
 		vert.add_out('vec3 p_location');
 		vert.write('p_location = p_velocity * p_age;');
 		vert.write('spos.xyz += p_location;');
+		vert.write('spos.xyz *= vec3(0.01, 0.01, 0.01);');
 
 		vert.add_uniform('mat4 WVP', '_worldViewProjectionMatrix');
 		vert.write('gl_Position = mul(spos, WVP);');
@@ -87,5 +88,28 @@ class MakeParticle {
 		con_part.data.fragment_shader = frag.get();
 
 		return con_part;
+	}
+
+	public static function mask(vert: NodeShader, frag: NodeShader) {
+		#if arm_physics
+		if (Context.particlePhysics) {
+			vert.add_out('vec4 wpos');
+			vert.add_uniform('mat4 W', '_worldMatrix');
+			vert.write_attrib('wpos = mul(vec4(pos.xyz, 1.0), W);');
+			frag.add_uniform('vec3 particleHit', '_particleHit');
+			frag.write('dist = distance(particleHit, wpos.xyz) * 20.0;');
+			frag.write('if (dist > 1.0) discard;');
+			frag.write('float str = 1.0;');
+			frag.write('if (particleHit.x == 0.0 && particleHit.y == 0.0 && particleHit.z == 0.0) str = 0.0;');
+			return;
+		}
+		#end
+
+		frag.add_uniform('sampler2D texparticle', '_texparticle');
+		#if (kha_direct3d11 || kha_direct3d12 || kha_metal || kha_vulkan)
+		frag.write('float str = textureLod(texparticle, sp.xy, 0.0).r;');
+		#else
+		frag.write('float str = textureLod(texparticle, vec2(sp.x, (1.0 - sp.y)), 0.0).r;');
+		#end
 	}
 }

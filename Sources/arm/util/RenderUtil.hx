@@ -30,6 +30,7 @@ class RenderUtil {
 
 	public static inline var matPreviewSize = 256;
 	public static inline var decalPreviewSize = 512;
+	public static inline var layerPreviewSize = 200;
 	static var screenAlignedFullVB: VertexBuffer = null;
 	static var screenAlignedFullIB: IndexBuffer = null;
 
@@ -51,7 +52,7 @@ class RenderUtil {
 		Scene.active.camera.transform.setMatrix(m);
 		var savedFov = Scene.active.camera.data.raw.fov;
 		Scene.active.camera.data.raw.fov = 0.92;
-		ViewportUtil.updateCameraType(CameraPerspective);
+		Viewport.updateCameraType(CameraPerspective);
 		var light = Scene.active.lights[0];
 		var _lightStrength = light.data.raw.strength;
 		var probe = Scene.active.world.probe;
@@ -88,7 +89,7 @@ class RenderUtil {
 		Context.paintObject = painto;
 
 		Scene.active.camera.transform.setMatrix(Context.savedCamera);
-		ViewportUtil.updateCameraType(Context.cameraType);
+		Viewport.updateCameraType(Context.cameraType);
 		Scene.active.camera.data.raw.fov = savedFov;
 		Scene.active.camera.buildProjection();
 		Scene.active.camera.buildMatrix();
@@ -127,7 +128,7 @@ class RenderUtil {
 		Scene.active.camera.transform.setMatrix(m);
 		var savedFov = Scene.active.camera.data.raw.fov;
 		Scene.active.camera.data.raw.fov = 0.92;
-		ViewportUtil.updateCameraType(CameraPerspective);
+		Viewport.updateCameraType(CameraPerspective);
 		var light = Scene.active.lights[0];
 		light.visible = false;
 		Scene.active.world.envmap = Context.previewEnvmap;
@@ -155,7 +156,7 @@ class RenderUtil {
 
 		Scene.active.camera.transform.setMatrix(Context.savedCamera);
 		Scene.active.camera.data.raw.fov = savedFov;
-		ViewportUtil.updateCameraType(Context.cameraType);
+		Viewport.updateCameraType(Context.cameraType);
 		Scene.active.camera.buildProjection();
 		Scene.active.camera.buildMatrix();
 		var light = Scene.active.lights[0];
@@ -207,19 +208,18 @@ class RenderUtil {
 
 		var text = "Abg";
 		var font = Context.font.font;
-		var fontSize = 120;
+		var fontSize = 318;
 		var textW = Std.int(font.width(fontSize, text)) + 8;
 		var textH = Std.int(font.height(fontSize)) + 8;
 		if (Context.font.image == null) {
-			// Context.font.image = Image.createRenderTarget(200, 200, TextureFormat.L8);
-			Context.font.image = Image.createRenderTarget(200, 200, TextureFormat.RGBA32);
+			Context.font.image = Image.createRenderTarget(512, 512, TextureFormat.RGBA32);
 		}
 		var g2 = Context.font.image.g2;
 		g2.begin(true, 0x00000000);
 		g2.font = font;
 		g2.fontSize = fontSize;
 		g2.color = 0xffffffff;
-		g2.drawString(text, 200 / 2 - textW / 2, 200 / 2 - textH / 2);
+		g2.drawString(text, 512 / 2 - textW / 2, 512 / 2 - textH / 2);
 		g2.end();
 		Context.font.previewReady = true;
 
@@ -229,6 +229,7 @@ class RenderUtil {
 	public static function makeBrushPreview() {
 
 		if (RenderPathPaint.liveLayerLocked) return;
+		Context.materialPreview = true;
 
 		var current = @:privateAccess kha.graphics2.Graphics.current;
 		if (current != null) current.end();
@@ -236,7 +237,6 @@ class RenderUtil {
 		// Prepare layers
 		if (RenderPathPaint.liveLayer == null) {
 			RenderPathPaint.liveLayer = new arm.data.LayerSlot("_live");
-			RenderPathPaint.liveLayer.createMask(0xffffffff);
 		}
 
 		var l = RenderPathPaint.liveLayer;
@@ -283,13 +283,14 @@ class RenderUtil {
 		Context.material = new arm.data.MaterialSlot();
 		var _tool = Context.tool;
 		Context.tool = ToolBrush;
-		var _layerIsMask = Context.layerIsMask;
-		Context.layerIsMask = false;
+
+		var _layer = Context.layer;
+		if (Context.layer.isMask()) {
+			Context.layer = Context.layer.parent;
+		}
 
 		var _fill_layer = Context.layer.fill_layer;
-		var _fill_mask = Context.layer.fill_mask;
 		Context.layer.fill_layer = null;
-		Context.layer.fill_mask = null;
 
 		RenderPathPaint.useLiveLayer(true);
 		MakeMaterial.parsePaintMaterial(false);
@@ -314,7 +315,7 @@ class RenderUtil {
 		var cam = Scene.active.camera;
 		Context.savedCamera.setFrom(cam.transform.local);
 		var savedFov = cam.data.raw.fov;
-		ViewportUtil.updateCameraType(CameraPerspective);
+		Viewport.updateCameraType(CameraPerspective);
 		var m = Mat4.identity();
 		m.translate(0, 0, 0.5);
 		cam.transform.setMatrix(m);
@@ -341,7 +342,7 @@ class RenderUtil {
 		var _brushRadius = Context.brushRadius;
 		var _brushOpacity = Context.brushOpacity;
 		var _brushHardness = Context.brushHardness;
-		Context.brushRadius = 0.25;
+		Context.brushRadius = 0.33;
 		Context.brushOpacity = 1.0;
 		Context.brushHardness = 0.8;
 		var _x = Context.paintVec.x;
@@ -352,15 +353,14 @@ class RenderUtil {
 		Context.pdirty = 2;
 
 		// var pointsX = [0.2, 0.5, 0.5, 0.8, 0.8];
-		// var pointsY = [0.5, 0.2, 0.6, 0.3, 0.7];
+		// var pointsY = [0.5, 0.2 - 0.08, 0.6 + 0.03, 0.3 - 0.05, 0.7 + 0.05];
 		var pointsX = [0.2, 0.2,  0.35, 0.5,  0.5, 0.5,  0.65, 0.8,  0.8, 0.8];
-		var pointsY = [0.5, 0.5,  0.35, 0.2,  0.4, 0.6,  0.45, 0.3,  0.5, 0.7];
+		var pointsY = [0.5, 0.5,  0.35 - 0.04, 0.2 - 0.08,  0.4 + 0.015, 0.6 + 0.03,  0.45 - 0.025, 0.3 - 0.05,  0.5 + 0.025, 0.7 + 0.05];
 		for (i in 1...pointsX.length) {
 			Context.lastPaintVecX = pointsX[i - 1];
 			Context.lastPaintVecY = pointsY[i - 1];
 			Context.paintVec.x = pointsX[i];
 			Context.paintVec.y = pointsY[i];
-			Context.parseBrushInputs();
 			RenderPathPaint.commandsPaint(false);
 		}
 
@@ -374,20 +374,20 @@ class RenderUtil {
 		Context.prevPaintVecX = -1;
 		Context.prevPaintVecY = -1;
 		Context.pdirty = _pdirty;
-		Context.layer.fill_layer = _fill_layer;
-		Context.layer.fill_mask = _fill_mask;
 		RenderPathPaint.useLiveLayer(false);
+		Context.layer.fill_layer = _fill_layer;
+		Context.layer = _layer;
 		// scons[_si] = _scon;
 		// mcons[_mi] = _mcon;
 		Context.material = _material;
 		Context.tool = _tool;
-		Context.layerIsMask = _layerIsMask;
 		function _init() {
 			MakeMaterial.parsePaintMaterial(false);
 		}
 		iron.App.notifyOnInit(_init);
 
 		// Restore paint mesh
+		Context.materialPreview = false;
 		planeo.visible = false;
 		for (i in 0...Project.paintObjects.length) {
 			Project.paintObjects[i].visible = visibles[i];
@@ -398,7 +398,7 @@ class RenderUtil {
 		Context.paintObject = painto;
 		Scene.active.camera.transform.setMatrix(Context.savedCamera);
 		Scene.active.camera.data.raw.fov = savedFov;
-		ViewportUtil.updateCameraType(Context.cameraType);
+		Viewport.updateCameraType(Context.cameraType);
 		Scene.active.camera.buildProjection();
 		Scene.active.camera.buildMatrix();
 
@@ -439,8 +439,8 @@ class RenderUtil {
 		structure.add("tex", VertexData.Short2Norm);
 		structure.add("col", VertexData.Short4Norm);
 		screenAlignedFullVB = new VertexBuffer(Std.int(data.length / Std.int(structure.byteSize() / 4)), structure, Usage.StaticUsage);
-		var vertices = screenAlignedFullVB.lockInt16();
-		for (i in 0...vertices.length) vertices.set(i, data[i]);
+		var vertices = screenAlignedFullVB.lock();
+		for (i in 0...Std.int(vertices.byteLength / 2)) vertices.setInt16(i * 2, data[i]);
 		screenAlignedFullVB.unlock();
 
 		screenAlignedFullIB = new IndexBuffer(indices.length, Usage.StaticUsage);
@@ -476,24 +476,27 @@ class RenderUtil {
 		Context.paintObject.transform.buildMatrix();
 	}
 
-	public static function pickPositionAndNormal() {
-		Context.pickPosNor = true;
+	public static function pickPosNorTex() {
+		Context.pickPosNorTex = true;
 		Context.pdirty = 1;
 		var _tool = Context.tool;
 		Context.tool = ToolPicker;
-		var _layerIsMask = Context.layerIsMask;
-		Context.layerIsMask = false;
 		MakeMaterial.parsePaintMaterial();
+		if (Context.paint2d) {
+			arm.render.RenderPathPaint.setPlaneMesh();
+		}
 		arm.render.RenderPathPaint.commandsPaint(false);
+		if (Context.paint2d) {
+			arm.render.RenderPathPaint.restorePlaneMesh();
+		}
 		Context.tool = _tool;
-		Context.layerIsMask = _layerIsMask;
-		Context.pickPosNor = false;
+		Context.pickPosNorTex = false;
 		MakeMaterial.parsePaintMaterial();
 		Context.pdirty = 0;
 	}
 
 	public static function getDecalMat(): Mat4 {
-		RenderUtil.pickPositionAndNormal();
+		RenderUtil.pickPosNorTex();
 		var decalMat = Mat4.identity();
 		var loc = new Vec4(Context.posXPicked, Context.posYPicked, Context.posZPicked);
 		var rot = new Quat().fromTo(new Vec4(0.0, 0.0, -1.0), new Vec4(Context.norXPicked, Context.norYPicked, Context.norZPicked));

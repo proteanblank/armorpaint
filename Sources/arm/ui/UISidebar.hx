@@ -17,7 +17,7 @@ import iron.RenderPath;
 import iron.Scene;
 import arm.node.MakeMaterial;
 import arm.util.RenderUtil;
-import arm.util.ViewportUtil;
+import arm.Viewport;
 import arm.util.UVUtil;
 import arm.data.LayerSlot;
 import arm.data.BrushSlot;
@@ -36,14 +36,12 @@ class UISidebar {
 	public static inline var defaultWindowW = 280;
 	public var tabx = 0;
 	public var show = true;
-	public var isScrolling = false;
 	public var ui: Zui;
 	public var hwnd0 = Id.handle();
 	public var hwnd1 = Id.handle();
-	public var hwnd2 = Id.handle();
 	public var htab0 = Id.handle();
 	public var htab1 = Id.handle();
-	public var htab2 = Id.handle();
+	public var hminimize = Id.handle();
 	var borderStarted = 0;
 	var borderHandle: Handle = null;
 
@@ -73,7 +71,6 @@ class UISidebar {
 			Project.brushes.push(new BrushSlot());
 			Context.brush = Project.brushes[0];
 			MakeMaterial.parseBrush();
-			Context.parseBrushInputs();
 		}
 
 		if (Project.fonts == null) {
@@ -96,9 +93,9 @@ class UISidebar {
 
 		if (Context.emptyEnvmap == null) {
 			var b = Bytes.alloc(4);
-			b.set(0, 3);
-			b.set(1, 3);
-			b.set(2, 3);
+			b.set(0, 2);
+			b.set(1, 2);
+			b.set(2, 2);
 			b.set(3, 255);
 			Context.emptyEnvmap = Image.fromBytes(b, 1, 1);
 		}
@@ -124,7 +121,7 @@ class UISidebar {
 		History.reset();
 
 		var scale = Config.raw.window_scale;
-		ui = new Zui( { theme: App.theme, font: App.font, scaleFactor: scale, color_wheel: App.colorWheel } );
+		ui = new Zui({ theme: App.theme, font: App.font, scaleFactor: scale, color_wheel: App.colorWheel, black_white_gradient: App.blackWhiteGradient });
 		Zui.onBorderHover = onBorderHover;
 		Zui.onTextHover = onTextHover;
 
@@ -158,7 +155,6 @@ class UISidebar {
 	}
 
 	public function update() {
-		isScrolling = ui.isScrolling;
 		updateUI();
 
 		for (p in Plugin.plugins) if (p.update != null) p.update();
@@ -166,11 +162,7 @@ class UISidebar {
 		if (!App.uiEnabled) return;
 
 		if (!UINodes.inst.ui.isTyping && !ui.isTyping) {
-			if (Operator.shortcut(Config.keymap.cycle_layers)) {
-				var i = (Project.layers.indexOf(Context.layer) + 1) % Project.layers.length;
-				Context.setLayer(Project.layers[i]);
-			}
-			else if (Operator.shortcut(Config.keymap.toggle_2d_view)) {
+			if (Operator.shortcut(Config.keymap.toggle_2d_view)) {
 				show2DView(View2DLayer);
 			}
 			else if (Operator.shortcut(Config.keymap.toggle_node_editor)) {
@@ -235,8 +227,8 @@ class UISidebar {
 						Context.brushOpacity = Math.round(Context.brushOpacity * 100) / 100;
 						Context.brushOpacityHandle.value = Context.brushOpacity;
 					}
-					else if(Operator.shortcut(Config.keymap.brush_angle, ShortcutDown)) {
-						Context.brushAngle -= mouse.movementX / 5;
+					else if (Operator.shortcut(Config.keymap.brush_angle, ShortcutDown)) {
+						Context.brushAngle += mouse.movementX / 5;
 						Context.brushAngle = Std.int(Context.brushAngle) % 360;
 						if (Context.brushAngle < 0) Context.brushAngle += 360;
 						Context.brushAngleHandle.value = Context.brushAngle;
@@ -244,13 +236,13 @@ class UISidebar {
 					}
 					else if (decalMask && Operator.shortcut(Config.keymap.decal_mask + "+" + Config.keymap.brush_radius, ShortcutDown)) {
 						Context.brushDecalMaskRadius += mouse.movementX / 150;
-						Context.brushDecalMaskRadius = Math.max(0.05, Math.min(4.0, Context.brushDecalMaskRadius));
+						Context.brushDecalMaskRadius = Math.max(0.01, Math.min(4.0, Context.brushDecalMaskRadius));
 						Context.brushDecalMaskRadius = Math.round(Context.brushDecalMaskRadius * 100) / 100;
 						Context.brushDecalMaskRadiusHandle.value = Context.brushDecalMaskRadius;
 					}
 					else {
 						Context.brushRadius += mouse.movementX / 150;
-						Context.brushRadius = Math.max(0.05, Math.min(4.0, Context.brushRadius));
+						Context.brushRadius = Math.max(0.01, Math.min(4.0, Context.brushRadius));
 						Context.brushRadius = Math.round(Context.brushRadius * 100) / 100;
 						Context.brushRadiusHandle.value = Context.brushRadius;
 					}
@@ -269,21 +261,21 @@ class UISidebar {
 		var decal = Context.tool == ToolDecal || Context.tool == ToolText;
 		var decalMask = decal && Operator.shortcut(Config.keymap.decal_mask, ShortcutDown);
 
+		var isTyping = ui.isTyping || UIView2D.inst.ui.isTyping || UINodes.inst.ui.isTyping;
+		if (!isTyping) {
+			if (Operator.shortcut(Config.keymap.select_material, ShortcutDown)) {
+				for (i in 1...10) if (kb.started(i + "")) Context.selectMaterial(i - 1);
+			}
+			else if (Operator.shortcut(Config.keymap.select_layer, ShortcutDown)) {
+				for (i in 1...10) if (kb.started(i + "")) Context.selectLayer(i - 1);
+			}
+		}
+
 		// Viewport shortcuts
-		if (mouse.viewX > 0 && mouse.viewX < right &&
-			mouse.viewY > 0 && mouse.viewY < iron.App.h() &&
-			!ui.isTyping && !UIView2D.inst.ui.isTyping && !UINodes.inst.ui.isTyping) {
-
+		var inViewport = mouse.viewX > 0 && mouse.viewX < right &&
+						 mouse.viewY > 0 && mouse.viewY < iron.App.h();
+		if (inViewport && !isTyping) {
 			if (UIHeader.inst.worktab.position == SpacePaint) {
-				if (kb.down("shift")) {
-					if (kb.started("1")) Context.selectMaterial(0);
-					else if (kb.started("2")) Context.selectMaterial(1);
-					else if (kb.started("3")) Context.selectMaterial(2);
-					else if (kb.started("4")) Context.selectMaterial(3);
-					else if (kb.started("5")) Context.selectMaterial(4);
-					else if (kb.started("6")) Context.selectMaterial(5);
-				}
-
 				if (!mouse.down("right")) { // Fly mode off
 					if (Operator.shortcut(Config.keymap.tool_brush)) Context.selectTool(ToolBrush);
 					else if (Operator.shortcut(Config.keymap.tool_eraser)) Context.selectTool(ToolEraser);
@@ -349,28 +341,30 @@ class UISidebar {
 			}
 
 			// Viewpoint
-			if (Operator.shortcut(Config.keymap.view_reset)) {
-				ViewportUtil.resetViewport();
-				ViewportUtil.scaleToBounds();
+			if (mouse.viewX < iron.App.w()) {
+				if (Operator.shortcut(Config.keymap.view_reset)) {
+					Viewport.reset();
+					Viewport.scaleToBounds();
+				}
+				else if (Operator.shortcut(Config.keymap.view_back)) Viewport.setView(0, 1, 0, Math.PI / 2, 0, Math.PI);
+				else if (Operator.shortcut(Config.keymap.view_front)) Viewport.setView(0, -1, 0, Math.PI / 2, 0, 0);
+				else if (Operator.shortcut(Config.keymap.view_left)) Viewport.setView(-1, 0, 0, Math.PI / 2, 0, -Math.PI / 2);
+				else if (Operator.shortcut(Config.keymap.view_right)) Viewport.setView(1, 0, 0, Math.PI / 2, 0, Math.PI / 2);
+				else if (Operator.shortcut(Config.keymap.view_bottom)) Viewport.setView(0, 0, -1, Math.PI, 0, Math.PI);
+				else if (Operator.shortcut(Config.keymap.view_top)) Viewport.setView(0, 0, 1, 0, 0, 0);
+				else if (Operator.shortcut(Config.keymap.view_camera_type)) {
+					Context.cameraType = Context.cameraType == CameraPerspective ? CameraOrthographic : CameraPerspective;
+					Context.camHandle.position = Context.cameraType;
+					Viewport.updateCameraType(Context.cameraType);
+				}
+				else if (Operator.shortcut(Config.keymap.view_orbit_left, ShortcutRepeat)) Viewport.orbit(-Math.PI / 12, 0);
+				else if (Operator.shortcut(Config.keymap.view_orbit_right, ShortcutRepeat)) Viewport.orbit(Math.PI / 12, 0);
+				else if (Operator.shortcut(Config.keymap.view_orbit_up, ShortcutRepeat)) Viewport.orbit(0, -Math.PI / 12);
+				else if (Operator.shortcut(Config.keymap.view_orbit_down, ShortcutRepeat)) Viewport.orbit(0, Math.PI / 12);
+				else if (Operator.shortcut(Config.keymap.view_orbit_opposite)) Viewport.orbitOpposite();
+				else if (Operator.shortcut(Config.keymap.view_zoom_in, ShortcutRepeat)) Viewport.zoom(0.2);
+				else if (Operator.shortcut(Config.keymap.view_zoom_out, ShortcutRepeat)) Viewport.zoom(-0.2);
 			}
-			else if (Operator.shortcut(Config.keymap.view_back)) ViewportUtil.setView(0, 1, 0, Math.PI / 2, 0, Math.PI);
-			else if (Operator.shortcut(Config.keymap.view_front)) ViewportUtil.setView(0, -1, 0, Math.PI / 2, 0, 0);
-			else if (Operator.shortcut(Config.keymap.view_left)) ViewportUtil.setView(-1, 0, 0, Math.PI / 2, 0, -Math.PI / 2);
-			else if (Operator.shortcut(Config.keymap.view_right)) ViewportUtil.setView(1, 0, 0, Math.PI / 2, 0, Math.PI / 2);
-			else if (Operator.shortcut(Config.keymap.view_bottom)) ViewportUtil.setView(0, 0, -1, Math.PI, 0, Math.PI);
-			else if (Operator.shortcut(Config.keymap.view_top)) ViewportUtil.setView(0, 0, 1, 0, 0, 0);
-			else if (Operator.shortcut(Config.keymap.view_camera_type)) {
-				Context.cameraType = Context.cameraType == CameraPerspective ? CameraOrthographic : CameraPerspective;
-				Context.camHandle.position = Context.cameraType;
-				ViewportUtil.updateCameraType(Context.cameraType);
-			}
-			else if (Operator.shortcut(Config.keymap.view_orbit_left, ShortcutRepeat)) ViewportUtil.orbit(-Math.PI / 12, 0);
-			else if (Operator.shortcut(Config.keymap.view_orbit_right, ShortcutRepeat)) ViewportUtil.orbit(Math.PI / 12, 0);
-			else if (Operator.shortcut(Config.keymap.view_orbit_up, ShortcutRepeat)) ViewportUtil.orbit(0, -Math.PI / 12);
-			else if (Operator.shortcut(Config.keymap.view_orbit_down, ShortcutRepeat)) ViewportUtil.orbit(0, Math.PI / 12);
-			else if (Operator.shortcut(Config.keymap.view_orbit_opposite)) ViewportUtil.orbitOpposite();
-			else if (Operator.shortcut(Config.keymap.view_zoom_in, ShortcutRepeat)) ViewportUtil.zoom(0.2);
-			else if (Operator.shortcut(Config.keymap.view_zoom_out, ShortcutRepeat)) ViewportUtil.zoom(-0.2);
 		}
 
 		if (Context.brushCanLock || Context.brushLocked) {
@@ -430,12 +424,6 @@ class UISidebar {
 							Config.raw.layout[LayoutSidebarH1] -= my;
 						}
 					}
-					else if (borderHandle == hwnd2 && borderStarted == SideTop) {
-						if (Config.raw.layout[LayoutSidebarH1] + my > 32 && Config.raw.layout[LayoutSidebarH2] - my > 32) {
-							Config.raw.layout[LayoutSidebarH1] += my;
-							Config.raw.layout[LayoutSidebarH2] -= my;
-						}
-					}
 				}
 			}
 		}
@@ -443,6 +431,51 @@ class UISidebar {
 			borderHandle = null;
 			App.isResizing = false;
 		}
+
+		#if arm_physics
+		if (Context.tool == ToolParticle && Context.particlePhysics && inViewport && !Context.paint2d) {
+			var world = arm.plugin.PhysicsWorld.active;
+			world.lateUpdate();
+			Context.ddirty = 2;
+			Context.rdirty = 2;
+			if (mouse.started()) {
+				Scene.active.spawnObject(".Sphere", null, function(o: Object) {
+					iron.data.Data.getMaterial("Scene", ".Gizmo", function(md: MaterialData) {
+						var mo: MeshObject = cast o;
+						mo.name = ".Bullet";
+						mo.materials[0] = md;
+						mo.visible = true;
+
+						var camera = iron.Scene.active.camera;
+						var ct = camera.transform;
+						mo.transform.loc.set(ct.worldx(), ct.worldy(), ct.worldz());
+						mo.transform.scale.set(Context.brushRadius * 0.2, Context.brushRadius * 0.2, Context.brushRadius * 0.2);
+						mo.transform.buildMatrix();
+
+						var body = new arm.plugin.PhysicsBody();
+						body.shape = arm.plugin.PhysicsBody.ShapeType.ShapeSphere;
+						body.mass = 1.0;
+						mo.addTrait(body);
+
+						var ray = iron.math.RayCaster.getRay(mouse.viewX, mouse.viewY, camera);
+						body.applyImpulse(ray.direction.mult(0.1));
+
+						iron.system.Tween.timer(5, mo.remove);
+					});
+				});
+			}
+
+			var pairs = world.getContactPairs(Context.paintBody);
+			if (pairs != null) {
+				for (p in pairs) {
+					Context.particleHitX = p.posA.x;
+					Context.particleHitY = p.posA.y;
+					Context.particleHitZ = p.posA.z;
+					Context.pdirty = 1;
+				}
+			}
+		}
+		#end
 	}
 
 	public function toggleDistractFree() {
@@ -468,9 +501,9 @@ class UISidebar {
 
 	function updateUI() {
 
-		if (Log.messageTimer > 0) {
-			Log.messageTimer -= Time.delta;
-			if (Log.messageTimer <= 0) UIStatus.inst.statusHandle.redraws = 2;
+		if (Console.messageTimer > 0) {
+			Console.messageTimer -= Time.delta;
+			if (Console.messageTimer <= 0) UIStatus.inst.statusHandle.redraws = 2;
 		}
 
 		if (!App.uiEnabled) return;
@@ -536,6 +569,33 @@ class UISidebar {
 				   setCloneSource ||
 				   Operator.shortcut(Config.keymap.brush_ruler + "+" + Config.keymap.action_paint, ShortcutDown) ||
 				   (Input.getPen().down() && !kb.down("alt"));
+
+		#if (krom_android || krom_ios)
+		if (Input.getPen().down()) {
+			Context.penPaintingOnly = true;
+		}
+		else if (Context.penPaintingOnly) {
+			down = false;
+		}
+		#end
+
+
+		#if arm_physics
+		if (Context.particlePhysics) {
+			down = false;
+		}
+		#end
+
+		#if krom_ios
+		// No hover on iPad, decals are painted by pen release
+		if (decal) {
+			down = Input.getPen().released();
+			if (!Context.penPaintingOnly) {
+				down = down || Input.getMouse().released();
+			}
+		}
+		#end
+
 		if (down) {
 			var mx = mouse.viewX;
 			var my = mouse.viewY;
@@ -558,7 +618,7 @@ class UISidebar {
 					if (Context.brushTime == 0 &&
 						!App.isDragging &&
 						!App.isResizing &&
-						@:privateAccess ui.comboSelectedHandle == null) { // Paint started
+						!App.isComboSelected()) { // Paint started
 
 						// Draw line
 						if (Operator.shortcut(Config.keymap.brush_ruler + "+" + Config.keymap.action_paint, ShortcutDown)) {
@@ -583,6 +643,9 @@ class UISidebar {
 							// @:privateAccess psys.seed++;
 							#end
 						}
+						else if (Context.tool == ToolFill && Context.fillTypeHandle.position == FillUVIsland) {
+							UVUtil.uvislandmapCached = false;
+						}
 					}
 					Context.brushTime += Time.delta;
 					if (Context.runBrush != null) Context.runBrush(0);
@@ -598,46 +661,46 @@ class UISidebar {
 			#end
 			Context.brushBlendDirty = true; // Update brush mask
 			Context.layerPreviewDirty = true; // Update layer preview
+
+			// New color id picked, update fill layer
+			if (Context.tool == ToolColorId && Context.layer.fill_layer != null) {
+				App.notifyOnNextFrame(function() {
+					Layers.updateFillLayer();
+					MakeMaterial.parsePaintMaterial(false);
+				});
+			}
 		}
 
 		if (Context.layersPreviewDirty) {
 			Context.layersPreviewDirty = false;
 			Context.layerPreviewDirty = false;
+			Context.maskPreviewLast = null;
 			if (Layers.pipeMerge == null) Layers.makePipe();
 			// Update all layer previews
 			for (l in Project.layers) {
-				if (l.getChildren() != null) continue;
+				if (l.isGroup()) continue;
 				var target = l.texpaint_preview;
 				var source = l.texpaint;
 				var g2 = target.g2;
 				g2.begin(true, 0x00000000);
-				g2.pipeline = Layers.pipeCopy;
+				g2.pipeline = l.isMask() ? Layers.pipeCopy8 : Layers.pipeCopy;
 				g2.drawScaledImage(source, 0, 0, target.width, target.height);
 				g2.pipeline = null;
 				g2.end();
-				if (l.texpaint_mask != null) {
-					var target = l.texpaint_mask_preview;
-					var source = l.texpaint_mask;
-					var g2 = target.g2;
-					g2.begin(true, 0x00000000);
-					g2.pipeline = Layers.pipeCopy8;
-					g2.drawScaledImage(source, 0, 0, target.width, target.height);
-					g2.pipeline = null;
-					g2.end();
-				}
 			}
 			hwnd0.redraws = 2;
 		}
-		if (Context.layerPreviewDirty && Context.layer.getChildren() == null) {
+		if (Context.layerPreviewDirty && !Context.layer.isGroup()) {
 			Context.layerPreviewDirty = false;
+			Context.maskPreviewLast = null;
 			if (Layers.pipeMerge == null) Layers.makePipe();
 			// Update layer preview
 			var l = Context.layer;
-			var target = Context.layerIsMask ? l.texpaint_mask_preview : l.texpaint_preview;
-			var source = Context.layerIsMask ? l.texpaint_mask : l.texpaint;
+			var target = l.texpaint_preview;
+			var source = l.texpaint;
 			var g2 = target.g2;
 			g2.begin(true, 0x00000000);
-			g2.pipeline = Context.layerIsMask ? Layers.pipeCopy8 : Layers.pipeCopy;
+			g2.pipeline = Context.layer.isMask() ? Layers.pipeCopy8 : Layers.pipeCopy;
 			g2.drawScaledImage(source, 0, 0, target.width, target.height);
 			g2.pipeline = null;
 			g2.end();
@@ -651,20 +714,28 @@ class UISidebar {
 		if (undoPressed) History.undo();
 		else if (redoPressed) History.redo();
 
-		arm.plugin.Gizmo.update();
-
-		if (Context.lastCombo != null || (ui.tooltipImg == null && Context.lastTooltip != null)) App.redrawUI();
-		Context.lastCombo = ui.comboSelectedHandle;
-		Context.lastTooltip = ui.tooltipImg;
+		arm.render.Gizmo.update();
 	}
 
 	public function render(g: kha.graphics2.Graphics) {
-		if (System.windowWidth() == 0 || System.windowHeight() == 0) return;
+		#if (krom_android || krom_ios)
+		if (!show) {
+			ui.inputEnabled = true;
+			g.end();
+			ui.begin(g);
+			if (ui.window(Id.handle(), 0, 0, 150, Std.int(ui.ELEMENT_H() + ui.ELEMENT_OFFSET()))) {
+				if (ui.button(tr("Close"))) {
+					toggleDistractFree();
+				}
+			}
+			ui.end();
+			g.begin(false);
+		}
+		#end
 
-		if (!App.uiEnabled && ui.inputRegistered) ui.unregisterInput();
-		if (App.uiEnabled && !ui.inputRegistered) ui.registerInput();
+		if (!show || System.windowWidth() == 0 || System.windowHeight() == 0) return;
 
-		if (!show) return;
+		ui.inputEnabled = App.uiEnabled;
 
 		g.end();
 		ui.begin(g);
@@ -685,13 +756,19 @@ class UISidebar {
 			TabBrushes.draw();
 			TabParticles.draw();
 		}
-		if (ui.window(hwnd2, tabx, Config.raw.layout[LayoutSidebarH0] + Config.raw.layout[LayoutSidebarH1], Config.raw.layout[LayoutSidebarW], Config.raw.layout[LayoutSidebarH2])) {
-			TabTextures.draw();
-			TabMeshes.draw();
-			TabFonts.draw();
-			TabSwatches.draw();
+		if (Config.raw.layout[LayoutSidebarW] == 0) {
+			var width = Std.int(ui.ops.font.width(ui.fontSize, "<<") + 25 * ui.SCALE());
+			if (ui.window(hminimize, System.windowWidth() - width, 0, width, Std.int(ui.BUTTON_H()))) {
+				ui._w = width;
+				if (ui.button("<<"))
+					Config.raw.layout[LayoutSidebarW] = Context.maximizedSidebarWidth != 0 ? Context.maximizedSidebarWidth : Std.int(UISidebar.defaultWindowW * Config.raw.window_scale);
+			}
 		}
-
+		if (htab0.changed && (htab0.position == Context.lastHtab0Position) && Config.raw.layout[LayoutSidebarW] != 0) {
+			Context.maximizedSidebarWidth = Config.raw.layout[LayoutSidebarW];
+			Config.raw.layout[LayoutSidebarW] = 0 ;
+		}
+		Context.lastHtab0Position = htab0.position;
 		ui.end();
 		g.begin(false);
 	}
@@ -738,13 +815,19 @@ class UISidebar {
 			}
 
 			// Show picked material next to cursor
-			if (Context.tool == ToolPicker && Context.pickerSelectMaterial) {
+			if (Context.tool == ToolPicker && Context.pickerSelectMaterial && Context.colorPickerCallback == null) {
 				var img = Context.material.imageIcon;
 				#if kha_opengl
 				g.drawScaledImage(img, mx + 10, my + 10 + img.height, img.width, -img.height);
 				#else
 				g.drawImage(img, mx + 10, my + 10);
 				#end
+			}
+			if (Context.tool == ToolPicker && Context.colorPickerCallback != null) {
+				var img = Res.get("icons.k");
+				var rect = Res.tile50(img, ToolPicker, 0);
+					
+				g.drawSubImage(img, mx + 10, my + 10, rect.x, rect.y, rect.w, rect.h);
 			}
 
 			var cursorImg = Res.get("cursor.k");
@@ -814,6 +897,9 @@ class UISidebar {
 					(decalMask && in2dView)) {
 					if (decalMask) {
 						psize = Std.int(cursorImg.width * (Context.brushDecalMaskRadius * Context.brushNodesRadius) * ui.SCALE());
+					}
+					if (Config.raw.brush_3d && in2dView) {
+						psize = Std.int(psize * UIView2D.inst.panScale);
 					}
 					g.drawScaledImage(cursorImg, mx - psize / 2, my - psize / 2, psize, psize);
 				}
@@ -885,7 +971,6 @@ class UISidebar {
 		if (!App.uiEnabled) return;
 		if (handle != hwnd0 &&
 			handle != hwnd1 &&
-			handle != hwnd2 &&
 			handle != UIStatus.inst.statusHandle &&
 			handle != UINodes.inst.hwnd &&
 			handle != UIView2D.inst.hwnd) return; // Scalable handles
@@ -893,7 +978,6 @@ class UISidebar {
 		if (handle == UINodes.inst.hwnd && side == SideTop && !UIView2D.inst.show) return;
 		if (handle == UIView2D.inst.hwnd && side != SideLeft) return;
 		if (handle == hwnd0 && side == SideTop) return;
-		if (handle == hwnd2 && side == SideBottom) return;
 		if (handle == UIStatus.inst.statusHandle && side != SideTop) return;
 		if (side == SideRight) return; // UI is snapped to the right side
 
@@ -920,6 +1004,5 @@ class UISidebar {
 		UIMenubar.inst.menuHandle.redraws = 2;
 		hwnd0.redraws = 2;
 		hwnd1.redraws = 2;
-		hwnd2.redraws = 2;
 	}
 }

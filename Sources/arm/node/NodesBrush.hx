@@ -5,7 +5,9 @@ import zui.Nodes;
 class NodesBrush {
 
 	// Mark strings as localizable
-	public static inline function _tr(s: String) { return s; }
+	public static inline function _tr(s: String) {
+		return s;
+	}
 
 	public static var categories = [_tr("Nodes")];
 
@@ -212,7 +214,7 @@ class NodesBrush {
 					{
 						name: _tr("operation"),
 						type: "ENUM",
-						data: ["Add", "Subtract", "Multiply", "Divide", "Power", "Logarithm", "Square Root", "Absolute", "Minimum", "Maximum", "Less Than", "Greater Than", "Round", "Floor", "Ceil", "Fract", "Modulo", "Sine", "Cosine", "Tangent", "Arcsine", "Arccosine", "Arctangent", "Arctan2"],
+						data: ["Add", "Subtract", "Multiply", "Divide", "Power", "Logarithm", "Square Root", "Inverse Square Root", "Absolute", "Exponent", "Minimum", "Maximum", "Less Than", "Greater Than", "Sign", "Round", "Floor", "Ceil", "Truncate", "Fraction", "Modulo", "Snap", "Ping-Pong", "Sine", "Cosine", "Tangent", "Arcsine", "Arccosine", "Arctangent", "Arctan2", "Hyperbolic Sine", "Hyperbolic Cosine", "Hyperbolic Tangent", "To Radians", "To Degrees"],
 						default_value: 0,
 						output: 0
 					},
@@ -465,7 +467,7 @@ class NodesBrush {
 					{
 						name: _tr("operation"),
 						type: "ENUM",
-						data: ["Add", "Subtract", "Average", "Dot Product", "Cross Product", "Normalize", "Multiply" ],
+						data: ["Add", "Subtract", "Multiply", "Divide", "Average", "Cross Product", "Project", "Reflect", "Dot Product", "Distance", "Length", "Scale", "Normalize", "Absolute", "Minimum", "Maximum", "Floor", "Ceil", "Fraction", "Modulo", "Snap", "Sine", "Cosine", "Tangent"],
 						default_value: 0,
 						output: 0
 					}

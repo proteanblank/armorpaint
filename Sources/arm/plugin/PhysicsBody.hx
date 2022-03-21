@@ -41,7 +41,7 @@ class PhysicsBody extends iron.Trait {
 	public var trigger = false;
 	public var group = 1;
 	public var mask = 1;
-	var shape = ShapeBox;
+	public var shape = ShapeBox;
 	var destroyed = false;
 	var bodyScaleX: Float; // Transform scale at creation time
 	var bodyScaleY: Float;
@@ -89,13 +89,15 @@ class PhysicsBody extends iron.Trait {
 		notifyOnAdd(init);
 	}
 
-	inline function withMargin(f: Float) { return f - f * collisionMargin; }
+	inline function withMargin(f: Float) {
+		return f - f * collisionMargin;
+	}
 
 	function init() {
 		if (ready) return;
 		ready = true;
 
-		if (!Std.is(object, MeshObject)) return; // No mesh data
+		if (!Std.isOfType(object, MeshObject)) return; // No mesh data
 		var transform = object.transform;
 		var physics = PhysicsWorld.active;
 

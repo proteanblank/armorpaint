@@ -9,28 +9,40 @@ let raytrace = d3d12 || vulkan;
 let metal = process.argv.indexOf("metal") >= 0;
 let vr = process.argv.indexOf("--vr") >= 0;
 let snapshot = process.argv.indexOf("--snapshot") >= 0;
+let plugin_embed = ios;
+let physics = !ios;
 
 let project = new Project("ArmorPaint");
 project.addSources("Sources");
 project.addLibrary("iron");
 project.addLibrary("zui");
 project.addLibrary("armorbase");
-project.addShaders("Shaders/common/*.glsl", { embed: snapshot});
-project.addAssets("Assets/common/*", { destination: "data/{name}", embed: snapshot });
+project.addShaders("Shaders/*.glsl", { embed: snapshot});
+project.addShaders("armorcore/Shaders/*.glsl", { embed: snapshot});
+project.addAssets("Assets/*", { destination: "data/{name}", embed: snapshot });
+project.addShaders("Libraries/armorbase/Shaders/common/*.glsl", { embed: snapshot});
+project.addAssets("Libraries/armorbase/Assets/common/*", { destination: "data/{name}", embed: snapshot });
 if (!snapshot) {
 	project.addDefine("arm_noembed");
-	project.addAssets("Assets/common/extra/*", { destination: "data/{name}" });
+	project.addAssets("Libraries/armorbase/Assets/common/extra/*", { destination: "data/{name}" });
 }
 project.addAssets("Assets/export_presets/*", { destination: "data/export_presets/{name}" });
 project.addAssets("Assets/keymap_presets/*", { destination: "data/keymap_presets/{name}" });
 project.addAssets("Assets/locale/*", { destination: "data/locale/{name}" });
 project.addAssets("Assets/licenses/**", { destination: "data/licenses/{name}" });
 project.addAssets("Assets/plugins/*", { destination: "data/plugins/{name}" });
-project.addAssets("Assets/themes/*.json", { destination: "data/themes/{name}" });
+if (plugin_embed) {
+	project.addAssets("Assets/plugins/embed/*", { destination: "data/plugins/{name}" });
+}
+else {
+	project.addAssets("Assets/plugins/wasm/*", { destination: "data/plugins/{name}" });
+}
 project.addAssets("Assets/meshes/*", { destination: "data/meshes/{name}" });
+project.addAssets("Libraries/armorbase/Assets/licenses/**", { destination: "data/licenses/{name}" });
+project.addAssets("Libraries/armorbase/Assets/themes/*.json", { destination: "data/themes/{name}" });
 if (metal) {
-	project.addShaders("Shaders/common/metal/*.glsl", { embed: snapshot});
-	project.addAssets("Assets/common/metal/*", { destination: "data/{name}" });
+	project.addShaders("Libraries/armorbase/Shaders/common/metal/*.glsl", { embed: snapshot});
+	project.addAssets("Libraries/armorbase/Assets/common/metal/*", { destination: "data/{name}" });
 }
 project.addDefine("js-es=6");
 project.addParameter("--macro include('arm.node.brush')");
@@ -44,8 +56,12 @@ project.addDefine("arm_resizable");
 project.addDefine("arm_taa");
 project.addDefine("arm_veloc");
 project.addDefine("arm_particles");
-// project.addDefine("arm_physics");
 // project.addDefine("arm_skin");
+
+if (physics) {
+	project.addDefine("arm_physics");
+	project.addAssets("Assets/plugins/wasm/ammo/*", { destination: "data/plugins/{name}" });
+}
 
 if (android) {
 	project.addDefine("krom_android");
@@ -67,6 +83,11 @@ else if (process.platform === "linux") {
 else if (process.platform === "darwin") {
 	project.addDefine("krom_darwin");
 	project.addDefine("kha_darwin");
+}
+
+if (android || ios) {
+	project.addDefine("arm_touchui"); // Use touch friendly UI
+	project.addDefine("zui_touchui");
 }
 
 if (debug) {
@@ -94,13 +115,13 @@ if (snapshot) {
 project.addAssets("Assets/readme/readme.txt", { destination: "{name}" });
 
 if (raytrace) {
-	project.addAssets("Libraries/armorbase/Assets/*", { destination: "data/{name}", embed: snapshot });
+	project.addAssets("Libraries/armorbase/Assets/raytrace/*", { destination: "data/{name}", embed: snapshot });
 	if (d3d12) {
-		project.addAssets("Libraries/armorbase/Shaders/*.cso", { destination: "data/{name}", embed: snapshot });
+		project.addAssets("Libraries/armorbase/Shaders/raytrace/*.cso", { destination: "data/{name}", embed: snapshot });
 		project.addAssets("Assets/readme/readme_dxr.txt", { destination: "{name}" });
 	}
 	else if (vulkan) {
-		project.addAssets("Libraries/armorbase/Shaders/*.spirv", { destination: "data/{name}", embed: snapshot });
+		project.addAssets("Libraries/armorbase/Shaders/raytrace/*.spirv", { destination: "data/{name}", embed: snapshot });
 		project.addAssets("Assets/readme/readme_vkrt.txt", { destination: "{name}" });
 	}
 }
@@ -117,10 +138,10 @@ if (process.platform !== "darwin" && !raytrace && !android && !ios) {
 	project.addDefine("arm_voxelgi_revox");
 
 	if (process.platform === "win32" && win_hlsl) {
-		project.addShaders("Shaders/voxel_hlsl/*.glsl", { embed: snapshot, noprocessing: true });
+		project.addShaders("Libraries/armorbase/Shaders/voxel_hlsl/*.glsl", { embed: snapshot, noprocessing: true });
 	}
 	else {
-		project.addShaders("Shaders/voxel_glsl/*.glsl", { embed: snapshot });
+		project.addShaders("Libraries/armorbase/Shaders/voxel_glsl/*.glsl", { embed: snapshot });
 	}
 }
 

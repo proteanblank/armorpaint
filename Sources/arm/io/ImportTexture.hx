@@ -2,7 +2,7 @@ package arm.io;
 
 import kha.Image;
 import iron.data.Data;
-import arm.ui.UISidebar;
+import arm.ui.UIStatus;
 import arm.sys.Path;
 import arm.ProjectFormat;
 
@@ -11,7 +11,7 @@ class ImportTexture {
 	public static function run(path: String, hdrAsEnvmap = true) {
 		if (!Path.isTexture(path)) {
 			if (!Context.enableImportPlugin(path)) {
-				Log.error(Strings.error1());
+				Console.error(Strings.error1());
 				return;
 			}
 		}
@@ -27,7 +27,7 @@ class ImportTexture {
 						});
 					});
 				}
-				Log.info(Strings.info0());
+				Console.info(Strings.info0());
 				return;
 			}
 		}
@@ -46,7 +46,8 @@ class ImportTexture {
 			if (Context.texture == null) Context.texture = asset;
 			Project.assetNames.push(name);
 			Project.assetMap.set(asset.id, image);
-			UISidebar.inst.hwnd2.redraws = 2;
+			UIStatus.inst.statusHandle.redraws = 2;
+			Console.info(tr("Texture imported:") + " " + name);
 
 			// Set as envmap
 			if (hdrAsEnvmap && path.toLowerCase().endsWith(".hdr")) {

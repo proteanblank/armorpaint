@@ -12,6 +12,8 @@ import arm.Enums;
 
 class MeshUtil {
 
+	public static var unwrappers: Map<String, Dynamic->Void> = [];
+
 	public static function mergeMesh(paintObjects: Array<MeshObject> = null) {
 		if (paintObjects == null) paintObjects = Project.paintObjects;
 		if (paintObjects.length == 0) return;
@@ -46,7 +48,7 @@ class MeshUtil {
 			}
 			for (j in 0...vas[1].values.length) va1[j + voff * 2] = vas[1].values[j];
 			for (j in 0...vas[2].values.length) va2[j + voff * 2] = vas[2].values[j];
-			if (va3 != null) for (j in 0...vas[3].values.length) va3[j + voff * 4] = vas[3].values[j];
+			if (va3 != null) for (j in 0...vas[3].values.length) va3[j + voff * 3] = vas[3].values[j];
 			for (j in 0...ias[0].values.length) ia[j + ioff] = ias[0].values[j] + voff;
 
 			voff += Std.int(vas[0].values.length / 4);
@@ -77,7 +79,7 @@ class MeshUtil {
 			Context.mergedObject = new MeshObject(md, Context.paintObject.materials);
 			Context.mergedObject.name = Context.paintObject.name + "_merged";
 			Context.mergedObject.force_context = "paint";
-			Context.mainObject().addChild(Context.mergedObject);
+			Context.mergedObject.setParent(Context.mainObject());
 		});
 
 		#if (kha_direct3d12 || kha_vulkan)
@@ -88,7 +90,7 @@ class MeshUtil {
 	public static function swapAxis(a: Int, b: Int) {
 		var objects = Project.paintObjects;
 		for (o in objects) {
-			// Remapping vertices, backle up
+			// Remapping vertices, buckle up
 			// 0 - x, 1 - y, 2 - z
 			var vas = o.data.raw.vertex_arrays;
 			var pa  = vas[0].values;
@@ -110,14 +112,14 @@ class MeshUtil {
 
 			var g = o.data.geom;
 			var l = g.structLength;
-			var vertices = g.vertexBuffer.lockInt16(); // posnortex
-			for (i in 0...Std.int(vertices.length / l)) {
-				vertices[i * l    ] = vas[0].values[i * 4    ];
-				vertices[i * l + 1] = vas[0].values[i * 4 + 1];
-				vertices[i * l + 2] = vas[0].values[i * 4 + 2];
-				vertices[i * l + 3] = vas[0].values[i * 4 + 3];
-				vertices[i * l + 4] = vas[1].values[i * 2    ];
-				vertices[i * l + 5] = vas[1].values[i * 2 + 1];
+			var vertices = g.vertexBuffer.lock(); // posnortex
+			for (i in 0...Std.int(vertices.byteLength / 2 / l)) {
+				vertices.setInt16((i * l    ) * 2, vas[0].values[i * 4    ]);
+				vertices.setInt16((i * l + 1) * 2, vas[0].values[i * 4 + 1]);
+				vertices.setInt16((i * l + 2) * 2, vas[0].values[i * 4 + 2]);
+				vertices.setInt16((i * l + 3) * 2, vas[0].values[i * 4 + 3]);
+				vertices.setInt16((i * l + 4) * 2, vas[1].values[i * 2    ]);
+				vertices.setInt16((i * l + 5) * 2, vas[1].values[i * 2 + 1]);
 			}
 			g.vertexBuffer.unlock();
 		}
@@ -133,13 +135,19 @@ class MeshUtil {
 	public static function flipNormals() {
 		var objects = Project.paintObjects;
 		for (o in objects) {
+			var vas = o.data.raw.vertex_arrays;
+			var va0 = vas[0].values;
+			var va1 = vas[1].values;
 			var g = o.data.geom;
 			var l = g.structLength;
-			var vertices = g.vertexBuffer.lockInt16(); // posnortex
-			for (i in 0...Std.int(vertices.length / l)) {
-				vertices[i * l + 3] = -vertices[i * l + 3];
-				vertices[i * l + 4] = -vertices[i * l + 4];
-				vertices[i * l + 5] = -vertices[i * l + 5];
+			var vertices = g.vertexBuffer.lock(); // posnortex
+			for (i in 0...Std.int(vertices.byteLength / 2 / l)) {
+				va0[i * 4 + 3] = -va0[i * 4 + 3];
+				va1[i * 2] = -va1[i * 2];
+				va1[i * 2 + 1] = -va1[i * 2 + 1];
+				vertices.setInt16((i * l + 3) * 2, -vertices.getInt16((i * l + 3) * 2));
+				vertices.setInt16((i * l + 4) * 2, -vertices.getInt16((i * l + 4) * 2));
+				vertices.setInt16((i * l + 5) * 2, -vertices.getInt16((i * l + 5) * 2));
 			}
 			g.vertexBuffer.unlock();
 		}
@@ -160,27 +168,27 @@ class MeshUtil {
 			var g = o.data.geom;
 			var l = g.structLength;
 			var inda = g.indices[0];
-			var vertices = g.vertexBuffer.lockInt16(); // posnortex
+			var vertices = g.vertexBuffer.lock(); // posnortex
 			for (i in 0...Std.int(inda.length / 3)) {
 				var i1 = inda[i * 3    ];
 				var i2 = inda[i * 3 + 1];
 				var i3 = inda[i * 3 + 2];
-				va.set(vertices[i1 * l], vertices[i1 * l + 1], vertices[i1 * l + 2]);
-				vb.set(vertices[i2 * l], vertices[i2 * l + 1], vertices[i2 * l + 2]);
-				vc.set(vertices[i3 * l], vertices[i3 * l + 1], vertices[i3 * l + 2]);
+				va.set(vertices.getInt16((i1 * l) * 2), vertices.getInt16((i1 * l + 1) * 2), vertices.getInt16((i1 * l + 2) * 2));
+				vb.set(vertices.getInt16((i2 * l) * 2), vertices.getInt16((i2 * l + 1) * 2), vertices.getInt16((i2 * l + 2) * 2));
+				vc.set(vertices.getInt16((i3 * l) * 2), vertices.getInt16((i3 * l + 1) * 2), vertices.getInt16((i3 * l + 2) * 2));
 				cb.subvecs(vc, vb);
 				ab.subvecs(va, vb);
 				cb.cross(ab);
 				cb.normalize();
-				vertices[i1 * l + 4] = Std.int(cb.x * 32767);
-				vertices[i1 * l + 5] = Std.int(cb.y * 32767);
-				vertices[i1 * l + 3] = Std.int(cb.z * 32767);
-				vertices[i2 * l + 4] = Std.int(cb.x * 32767);
-				vertices[i2 * l + 5] = Std.int(cb.y * 32767);
-				vertices[i2 * l + 3] = Std.int(cb.z * 32767);
-				vertices[i3 * l + 4] = Std.int(cb.x * 32767);
-				vertices[i3 * l + 5] = Std.int(cb.y * 32767);
-				vertices[i3 * l + 3] = Std.int(cb.z * 32767);
+				vertices.setInt16((i1 * l + 4) * 2, Std.int(cb.x * 32767));
+				vertices.setInt16((i1 * l + 5) * 2, Std.int(cb.y * 32767));
+				vertices.setInt16((i1 * l + 3) * 2, Std.int(cb.z * 32767));
+				vertices.setInt16((i2 * l + 4) * 2, Std.int(cb.x * 32767));
+				vertices.setInt16((i2 * l + 5) * 2, Std.int(cb.y * 32767));
+				vertices.setInt16((i2 * l + 3) * 2, Std.int(cb.z * 32767));
+				vertices.setInt16((i3 * l + 4) * 2, Std.int(cb.x * 32767));
+				vertices.setInt16((i3 * l + 5) * 2, Std.int(cb.y * 32767));
+				vertices.setInt16((i3 * l + 3) * 2, Std.int(cb.z * 32767));
 			}
 
 			if (smooth) {
@@ -196,9 +204,9 @@ class MeshUtil {
 						var i2 = inda[j];
 						var i1l = i1 * l;
 						var i2l = i2 * l;
-						if (vertices[i1l    ] == vertices[i2l    ] &&
-							vertices[i1l + 1] == vertices[i2l + 1] &&
-							vertices[i1l + 2] == vertices[i2l + 2]) {
+						if (vertices.getInt16((i1l    ) * 2) == vertices.getInt16((i2l    ) * 2) &&
+							vertices.getInt16((i1l + 1) * 2) == vertices.getInt16((i2l + 1) * 2) &&
+							vertices.getInt16((i1l + 2) * 2) == vertices.getInt16((i2l + 2) * 2)) {
 							// if (n1.dot(n2) > 0)
 							shared[sharedLen++] = i2;
 							found.push(j);
@@ -210,7 +218,7 @@ class MeshUtil {
 						for (j in 0...sharedLen) {
 							var i1 = shared[j];
 							var i1l = i1 * l;
-							va.addf(vertices[i1l + 4], vertices[i1l + 5], vertices[i1l + 3]);
+							va.addf(vertices.getInt16((i1l + 4) * 2), vertices.getInt16((i1l + 5) * 2), vertices.getInt16((i1l + 3) * 2));
 						}
 						va.mult(1 / sharedLen);
 						va.normalize();
@@ -220,9 +228,9 @@ class MeshUtil {
 						for (j in 0...sharedLen) {
 							var i1 = shared[j];
 							var i1l = i1 * l;
-							vertices[i1l + 4] = vax;
-							vertices[i1l + 5] = vay;
-							vertices[i1l + 3] = vaz;
+							vertices.setInt16((i1l + 4) * 2, vax);
+							vertices.setInt16((i1l + 5) * 2, vay);
+							vertices.setInt16((i1l + 3) * 2, vaz);
 						}
 					}
 				}
@@ -231,10 +239,10 @@ class MeshUtil {
 
 			var va0 = o.data.raw.vertex_arrays[0].values;
 			var va1 = o.data.raw.vertex_arrays[1].values;
-			for (i in 0...Std.int(vertices.length / l)) {
-				va1[i * 2    ] = vertices[i * l + 4];
-				va1[i * 2 + 1] = vertices[i * l + 5];
-				va0[i * 4 + 3] = vertices[i * l + 3];
+			for (i in 0...Std.int(vertices.byteLength / 4 / l)) {
+				va1[i * 2    ] = vertices.getInt16((i * l + 4) * 2);
+				va1[i * 2 + 1] = vertices.getInt16((i * l + 5) * 2);
+				va0[i * 4 + 3] = vertices.getInt16((i * l + 3) * 2);
 			}
 		}
 
@@ -294,11 +302,11 @@ class MeshUtil {
 			}
 
 			var l = g.structLength;
-			var vertices = g.vertexBuffer.lockInt16(); // posnortex
-			for (i in 0...Std.int(vertices.length / l)) {
-				vertices[i * l    ] = va[i * 4    ];
-				vertices[i * l + 1] = va[i * 4 + 1];
-				vertices[i * l + 2] = va[i * 4 + 2];
+			var vertices = g.vertexBuffer.lock(); // posnortex
+			for (i in 0...Std.int(vertices.byteLength / 2 / l)) {
+				vertices.setInt16((i * l    ) * 2, va[i * 4    ]);
+				vertices.setInt16((i * l + 1) * 2, va[i * 4 + 1]);
+				vertices.setInt16((i * l + 2) * 2, va[i * 4 + 2]);
 			}
 			g.vertexBuffer.unlock();
 		}
@@ -313,23 +321,38 @@ class MeshUtil {
 		var o = Project.paintObjects[0];
 		var g = o.data.geom;
 		var l = g.structLength;
-		var vertices = g.vertexBuffer.lockInt16(); // posnortex
-		for (i in 0...Std.int(vertices.length / l)) {
-			var x = Std.int(vertices[i * l + 6] / 32767 * res);
-			var y = Std.int(vertices[i * l + 7] / 32767 * res);
+		var vertices = g.vertexBuffer.lock(); // posnortex
+		for (i in 0...Std.int(vertices.byteLength / 2 / l)) {
+			var x = Std.int(vertices.getInt16((i * l + 6) * 2) / 32767 * res);
+			var y = Std.int(vertices.getInt16((i * l + 7) * 2) / 32767 * res);
 			var h = (1.0 - height.get((y * res + x) * 4 + 3) / 255) * strength;
-			vertices[i * l    ] -= Std.int(vertices[i * l + 4] * h);
-			vertices[i * l + 1] -= Std.int(vertices[i * l + 5] * h);
-			vertices[i * l + 2] -= Std.int(vertices[i * l + 3] * h);
+			vertices.setInt16((i * l    ) * 2, vertices.getInt16((i * l    ) * 2) - Std.int(vertices.getInt16((i * l + 4) * 2) * h));
+			vertices.setInt16((i * l + 1) * 2, vertices.getInt16((i * l + 1) * 2) - Std.int(vertices.getInt16((i * l + 5) * 2) * h));
+			vertices.setInt16((i * l + 2) * 2, vertices.getInt16((i * l + 2) * 2) - Std.int(vertices.getInt16((i * l + 3) * 2) * h));
 		}
 		g.vertexBuffer.unlock();
 
 		var va0 = o.data.raw.vertex_arrays[0].values;
 		var va1 = o.data.raw.vertex_arrays[1].values;
-		for (i in 0...Std.int(vertices.length / l)) {
-			va0[i * 4    ] = vertices[i * l    ];
-			va0[i * 4 + 1] = vertices[i * l + 1];
-			va0[i * 4 + 2] = vertices[i * l + 2];
+		for (i in 0...Std.int(vertices.byteLength / 4 / l)) {
+			va0[i * 4    ] = vertices.getInt16((i * l    ) * 2);
+			va0[i * 4 + 1] = vertices.getInt16((i * l + 1) * 2);
+			va0[i * 4 + 2] = vertices.getInt16((i * l + 2) * 2);
+		}
+	}
+
+	public static function equirectUnwrap(mesh: Dynamic) {
+		var verts = Std.int(mesh.posa.length / 4);
+		mesh.texa = new Int16Array(verts * 2);
+		var n = new Vec4();
+		for (i in 0...verts) {
+			n.set(mesh.posa[i * 4] / 32767, mesh.posa[i * 4 + 1] / 32767, mesh.posa[i * 4 + 2] / 32767).normalize();
+			// Sphere projection
+			// mesh.texa[i * 2    ] = Math.atan2(n.x, n.y) / (Math.PI * 2) + 0.5;
+			// mesh.texa[i * 2 + 1] = n.z * 0.5 + 0.5;
+			// Equirect
+			mesh.texa[i * 2    ] = Std.int(((Math.atan2(-n.z, n.x) + Math.PI) / (Math.PI * 2)) * 32767);
+			mesh.texa[i * 2 + 1] = Std.int((Math.acos(n.y) / Math.PI) * 32767);
 		}
 	}
 }

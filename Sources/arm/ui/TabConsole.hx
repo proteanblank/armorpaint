@@ -13,21 +13,27 @@ class TabConsole {
 	public static function draw() {
 		var ui = UISidebar.inst.ui;
 
-		var title = Log.messageTimer > 0 ? Log.message + "        " : tr("Console");
-		var color = Log.messageTimer > 0 ? Log.messageColor : -1;
+		var title = Console.messageTimer > 0 ? Console.message + "        " : tr("Console");
+		var color = Console.messageTimer > 0 ? Console.messageColor : -1;
 
 		var statush = Config.raw.layout[LayoutStatusH];
 		if (ui.tab(UIStatus.inst.statustab, title, false, color) && statush > UIStatus.defaultStatusH * ui.SCALE()) {
 
 			ui.beginSticky();
-			ui.row([1 / 20, 1 / 20]);
+			#if (krom_windows || krom_linux || krom_darwin)
+			ui.row([1 / 14, 1 / 14, 1 / 14]); // Copy
+			#elseif arm_touchui
+			ui.row([1 / 4, 1 / 4]);
+			#else
+			ui.row([1 / 14, 1 / 14]);
+			#end
 
 			if (ui.button(tr("Clear"))) {
-				Log.lastTraces = [];
+				Console.lastTraces = [];
 			}
 			if (ui.button(tr("Export"))) {
-				var str = Log.lastTraces.join("\n");
-				UIFiles.show("txt", true, function(path: String) {
+				var str = Console.lastTraces.join("\n");
+				UIFiles.show("txt", true, false, function(path: String) {
 					var f = UIFiles.filename;
 					if (f == "") f = tr("untitled");
 					path = path + Path.sep + f;
@@ -35,10 +41,16 @@ class TabConsole {
 					Krom.fileSaveBytes(path, Bytes.ofString(str).getData());
 				});
 			}
+			#if (krom_windows || krom_linux || krom_darwin)
+			if (ui.button(tr("Copy"))) {
+				var str = Console.lastTraces.join("\n");
+				Krom.copyToClipboard(str);
+			}
+			#end
 
 			ui.endSticky();
 
-			for (t in Log.lastTraces) {
+			for (t in Console.lastTraces) {
 				ui.text(t);
 			}
 		}

@@ -13,6 +13,12 @@ class TabBrowser {
 	static var known = false;
 	static var lastPath =  "";
 
+	public static function showDirectory(directory: String) {
+		hpath.text = directory;
+		hsearch.text = "";
+		UIStatus.inst.statustab.position = 0;
+	}
+
 	@:access(zui.Zui)
 	public static function draw() {
 		var ui = UISidebar.inst.ui;
@@ -30,13 +36,28 @@ class TabBrowser {
 			}
 
 			ui.beginSticky();
-			ui.row([bookmarksW / ui._w, (1 - bookmarksW / ui._w) * 0.8, (1 - bookmarksW / ui._w) * 0.2]);
+			if (hsearch.text != "") {
+				ui.row([bookmarksW / ui._w, (1 - bookmarksW / ui._w) * 0.75, (1 - bookmarksW / ui._w) * 0.05, (1 - bookmarksW / ui._w) * 0.17, (1 - bookmarksW / ui._w) * 0.03]);
+			}
+			else {
+				ui.row([bookmarksW / ui._w, (1 - bookmarksW / ui._w) * 0.75, (1 - bookmarksW / ui._w) * 0.05, (1 - bookmarksW / ui._w) * 0.2]);
+			}
+
 			if (ui.button("+")) {
 				Config.raw.bookmarks.push(hpath.text);
 				Config.save();
 			}
 			hpath.text = ui.textInput(hpath, tr("Path"));
+			var refresh = false;
+			var inFocus = ui.inputX > ui._windowX && ui.inputX < ui._windowX + ui._windowW &&
+						  ui.inputY > ui._windowY && ui.inputY < ui._windowY + ui._windowH;
+			if (ui.button(tr("Refresh")) || (inFocus && ui.isKeyPressed && ui.key == kha.input.KeyCode.F5)) {
+				refresh = true;
+			}
 			hsearch.text = ui.textInput(hsearch, tr("Search"));
+			if (hsearch.text != "" && ui.button(tr("X"))) {
+				hsearch.text = "";
+			}
 			ui.endSticky();
 
 			if (lastPath != hpath.text) {
@@ -47,7 +68,7 @@ class TabBrowser {
 			var _y = ui._y;
 			ui._x = bookmarksW;
 			ui._w -= bookmarksW;
-			UIFiles.fileBrowser(ui, hpath, false, true, hsearch.text);
+			UIFiles.fileBrowser(ui, hpath, false, true, hsearch.text, refresh);
 
 			if (known) {
 				var path = hpath.text;

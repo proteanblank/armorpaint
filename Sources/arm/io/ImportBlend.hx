@@ -18,11 +18,13 @@ import arm.data.MaterialSlot;
 
 class ImportBlend {
 
+	static inline var eps = 1.0 / 32767;
+
 	public static function run(path: String, replaceExisting = true) {
 		Data.getBlob(path, function(b: Blob) {
 			var bl = new BlendParser(b);
 			if (bl.dna == null) {
-				Log.error(Strings.error3());
+				Console.error(Strings.error3());
 				return;
 			}
 
@@ -84,11 +86,11 @@ class ImportBlend {
 						var uv2: Float32Array = null;
 						if (hasuv) {
 							uv0 = m.get("mloopuv", loopstart + totloop - 1).get("uv");
-							if (uv0[0] > 1.0) uv0[0] = uv0[0] - Std.int(uv0[0]);
-							if (uv0[1] > 1.0) uv0[1] = uv0[1] - Std.int(uv0[1]);
+							if (uv0[0] > 1.0 + eps) uv0[0] = uv0[0] - Std.int(uv0[0]);
+							if (uv0[1] > 1.0 + eps) uv0[1] = uv0[1] - Std.int(uv0[1]);
 							uv1 = m.get("mloopuv", loopstart).get("uv");
-							if (uv1[0] > 1.0) uv1[0] = uv1[0] - Std.int(uv1[0]);
-							if (uv1[1] > 1.0) uv1[1] = uv1[1] - Std.int(uv1[1]);
+							if (uv1[0] > 1.0 + eps) uv1[0] = uv1[0] - Std.int(uv1[0]);
+							if (uv1[1] > 1.0 + eps) uv1[1] = uv1[1] - Std.int(uv1[1]);
 						}
 						var col0r: Int = 0;
 						var col0g: Int = 0;
@@ -148,8 +150,8 @@ class ImportBlend {
 							vec1.setFrom(vec2);
 							if (hasuv) {
 								uv2 = m.get("mloopuv", loopstart + j + 1).get("uv");
-								if (uv2[0] > 1.0) uv2[0] = uv2[0] - Std.int(uv2[0]);
-								if (uv2[1] > 1.0) uv2[1] = uv2[1] - Std.int(uv2[1]);
+								if (uv2[0] > 1.0 + eps) uv2[0] = uv2[0] - Std.int(uv2[0]);
+								if (uv2[1] > 1.0 + eps) uv2[1] = uv2[1] - Std.int(uv2[1]);
 								texa[tri * 6    ] = Std.int(uv0[0] * 32767);
 								texa[tri * 6 + 1] = Std.int((1.0 - uv0[1]) * 32767);
 								texa[tri * 6 + 2] = Std.int(uv1[0] * 32767);
@@ -279,14 +281,14 @@ class ImportBlend {
 								var uv2: Float32Array = null;
 								if (hasuv) {
 									uv0 = m.get("mloopuv", va[i ]).get("uv");
-									if (uv0[0] > 1.0) uv0[0] = uv0[0] - Std.int(uv0[0]);
-									if (uv0[1] > 1.0) uv0[1] = uv0[1] - Std.int(uv0[1]);
+									if (uv0[0] > 1.0 + eps) uv0[0] = uv0[0] - Std.int(uv0[0]);
+									if (uv0[1] > 1.0 + eps) uv0[1] = uv0[1] - Std.int(uv0[1]);
 									uv1 = m.get("mloopuv", va[i1]).get("uv");
-									if (uv1[0] > 1.0) uv1[0] = uv1[0] - Std.int(uv1[0]);
-									if (uv1[1] > 1.0) uv1[1] = uv1[1] - Std.int(uv1[1]);
+									if (uv1[0] > 1.0 + eps) uv1[0] = uv1[0] - Std.int(uv1[0]);
+									if (uv1[1] > 1.0 + eps) uv1[1] = uv1[1] - Std.int(uv1[1]);
 									uv2 = m.get("mloopuv", va[i2]).get("uv");
-									if (uv2[0] > 1.0) uv2[0] = uv2[0] - Std.int(uv2[0]);
-									if (uv2[1] > 1.0) uv2[1] = uv2[1] - Std.int(uv2[1]);
+									if (uv2[0] > 1.0 + eps) uv2[0] = uv2[0] - Std.int(uv2[0]);
+									if (uv2[1] > 1.0 + eps) uv2[1] = uv2[1] - Std.int(uv2[1]);
 								}
 								var col0r: Int = 0;
 								var col0g: Int = 0;
@@ -411,13 +413,13 @@ class ImportBlend {
 		Data.getBlob(path, function(b: Blob) {
 			var bl = new BlendParser(b);
 			if (bl.dna == null) {
-				Log.error(Strings.error3());
+				Console.error(Strings.error3());
 				return;
 			}
 
 			var mats = bl.get("Material");
 			if (mats.length == 0) {
-				Log.error("Error: No materials found");
+				Console.error("Error: No materials found");
 				return;
 			}
 
@@ -432,8 +434,18 @@ class ImportBlend {
 				var canvas = Context.material.canvas;
 				canvas.name = mat.get("id").get("name").substr(2); // MAWood
 				var nout: TNode = null;
-				for (n in canvas.nodes) if (n.type == "OUTPUT_MATERIAL_PBR") { nout = n; break; }
-				for (n in canvas.nodes) if (n.name == "RGB") { nodes.removeNode(n, canvas); break; }
+				for (n in canvas.nodes) {
+					if (n.type == "OUTPUT_MATERIAL_PBR") {
+						nout = n;
+						break;
+					}
+				}
+				for (n in canvas.nodes) {
+					if (n.name == "RGB") {
+						nodes.removeNode(n, canvas);
+						break;
+					}
+				}
 
 				// Parse nodetree
 				var nodetree = mat.get("nodetree"); // bNodeTree
@@ -449,7 +461,7 @@ class ImportBlend {
 					node = node.get("next");
 				}
 				if (node.get("idname") != "ShaderNodeBsdfPrincipled") {
-					Log.error("Error: No Principled BSDF node found");
+					Console.error("Error: No Principled BSDF node found");
 					continue;
 				}
 
@@ -572,8 +584,18 @@ class ImportBlend {
 
 					var from_id = -1;
 					var to_id = -1;
-					for (n in canvas.nodes) if (n.name == fromnode) { from_id = n.id; break; }
-					for (n in canvas.nodes) if (n.name == tonode) { to_id = n.id; break; }
+					for (n in canvas.nodes) {
+						if (n.name == fromnode) {
+							from_id = n.id;
+							break;
+						}
+					}
+					for (n in canvas.nodes) {
+						if (n.name == tonode) {
+							to_id = n.id;
+							break;
+						}
+					}
 
 					if (from_id >= 0 && to_id >= 0) {
 						var from_socket = 0;
@@ -624,6 +646,7 @@ class ImportBlend {
 					link = link.get("next");
 					if (last.block == link.block) break;
 				}
+				History.newMaterial();
 			}
 
 			function _init() {

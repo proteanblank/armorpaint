@@ -1,8 +1,10 @@
 package arm.io;
 
 import haxe.Json;
+import haxe.io.Bytes;
 import zui.Nodes;
 import iron.data.SceneFormat;
+import iron.object.MeshObject;
 import iron.system.ArmPack;
 import iron.system.Lz4;
 import arm.data.FontSlot;
@@ -14,9 +16,9 @@ import arm.Enums;
 
 class ExportArm {
 
-	public static function runMesh(path: String) {
+	public static function runMesh(path: String, paintObjects: Array<MeshObject>) {
 		var mesh_datas: Array<TMeshData> = [];
-		for (p in Project.paintObjects) mesh_datas.push(p.data.raw);
+		for (p in paintObjects) mesh_datas.push(p.data.raw);
 		var raw: TSceneFormat = { mesh_datas: mesh_datas };
 		var b = ArmPack.encode(raw);
 		if (!path.endsWith(".arm")) path += ".arm";
@@ -63,14 +65,12 @@ class ExportArm {
 				texpaint: l.texpaint != null ? Lz4.encode(l.texpaint.getPixels()) : null,
 				texpaint_nor: l.texpaint_nor != null ? Lz4.encode(l.texpaint_nor.getPixels()) : null,
 				texpaint_pack: l.texpaint_pack != null ? Lz4.encode(l.texpaint_pack.getPixels()) : null,
-				texpaint_mask: l.texpaint_mask != null ? Lz4.encode(l.texpaint_mask.getPixels()) : null,
 				uv_scale: l.scale,
 				uv_rot: l.angle,
 				uv_type: l.uvType,
 				decal_mat: l.uvType == UVProject ? l.decalMat.toFloat32Array() : null,
 				opacity_mask: l.maskOpacity,
 				fill_layer: l.fill_layer != null ? Project.materials.indexOf(l.fill_layer) : -1,
-				fill_mask: l.fill_mask != null ? Project.materials.indexOf(l.fill_mask) : -1,
 				object_mask: l.objectMask,
 				blending: l.blending,
 				parent: l.parent != null ? Project.layers.indexOf(l.parent) : -1,
@@ -90,7 +90,11 @@ class ExportArm {
 		}
 
 		var packed_assets = Project.raw.packed_assets == null || Project.raw.packed_assets.length == 0 ? null : Project.raw.packed_assets;
+		#if krom_ios
+		var sameDrive = false;
+		#else
 		var sameDrive = Project.raw.envmap != null ? Project.filepath.charAt(0) == Project.raw.envmap.charAt(0) : true;
+		#end
 
 		Project.raw = {
 			version: Main.version,
@@ -109,7 +113,7 @@ class ExportArm {
 			envmap: Project.raw.envmap != null ? (sameDrive ? Path.toRelative(Project.filepath, Project.raw.envmap) : Project.raw.envmap) : null,
 			envmap_strength: iron.Scene.active.world.probe.raw.strength,
 			camera_world: iron.Scene.active.camera.transform.local.toFloat32Array(),
-			camera_origin: vec3f32(arm.plugin.Camera.inst.origins[0]),
+			camera_origin: vec3f32(arm.Camera.inst.origins[0]),
 			camera_fov: iron.Scene.active.camera.data.raw.fov,
 			#if (kha_metal || kha_vulkan)
 			is_bgra: true
@@ -118,16 +122,61 @@ class ExportArm {
 			#end
 		};
 
+		#if (krom_android || krom_ios)
+		var tex = iron.RenderPath.active.renderTargets.get(Context.renderMode == RenderForward ? "buf" : "tex").image;
+		var mesh_icon = kha.Image.createRenderTarget(256, 256);
+		var r = App.w() / App.h();
+		mesh_icon.g2.begin(false);
+		#if kha_opengl
+		mesh_icon.g2.drawScaledImage(tex, -(256 * r - 256) / 2, 256, 256 * r, -256);
+		#else
+		mesh_icon.g2.drawScaledImage(tex, -(256 * r - 256) / 2, 0, 256 * r, 256);
+		#end
+		mesh_icon.g2.end();
+		#if kha_metal
+		// Flush command list
+		mesh_icon.g2.begin(false);
+		mesh_icon.g2.end();
+		#end
+		var mesh_icon_pixels = mesh_icon.getPixels();
+		for (i in 0...256 * 256 * 4) {
+			mesh_icon_pixels.set(i, Std.int(Math.pow(mesh_icon_pixels.get(i) / 255, 1.0 / 2.2) * 255));
+		}
+		#if (kha_metal || kha_vulkan)
+		bgraSwap(mesh_icon_pixels);
+		#end
+		App.notifyOnNextFrame(function() {
+			mesh_icon.unload();
+		});
+		// Project.raw.mesh_icons =
+		// 	#if (kha_metal || kha_vulkan)
+		// 	[Lz4.encode(bgraSwap(mesh_icon_pixels)];
+		// 	#else
+		// 	[Lz4.encode(mesh_icon_pixels)];
+		// 	#end
+		Krom.writePng(Project.filepath.substr(0, Project.filepath.length - 4) + "_icon.png", mesh_icon_pixels.getData(), 256, 256, 0);
+		#end
+
+		var isPacked = Project.filepath.endsWith("_packed_.arm");
+		if (isPacked) { // Pack textures
+			packAssets(Project.raw, Project.assets);
+		}
+
 		var bytes = ArmPack.encode(Project.raw);
 		Krom.fileSaveBytes(Project.filepath, bytes.getData(), bytes.length + 1);
 
 		// Save to recent
+		#if krom_ios
+		var recent_path = Project.filepath.substr(Project.filepath.lastIndexOf("/") + 1);
+		#else
+		var recent_path = Project.filepath;
+		#end
 		var recent = Config.raw.recent_projects;
-		recent.remove(Project.filepath);
-		recent.unshift(Project.filepath);
+		recent.remove(recent_path);
+		recent.unshift(recent_path);
 		Config.save();
 
-		Log.info("Project saved.");
+		Console.info("Project saved.");
 	}
 
 	static function exportNode(n: TNode, assets: Array<TAsset> = null) {
@@ -142,6 +191,10 @@ class ExportArm {
 				}
 			}
 		}
+		// Pack colors
+		if (n.color > 0) n.color -= untyped 4294967296;
+		for (inp in n.inputs) if (inp.color > 0) inp.color -= untyped 4294967296;
+		for (out in n.outputs) if (out.color > 0) out.color -= untyped 4294967296;
 	}
 
 	public static function runMaterial(path: String) {
@@ -162,7 +215,10 @@ class ExportArm {
 		var texture_files = assetsToFiles(path, assets);
 		var isCloud = path.endsWith("_cloud_.arm");
 		if (isCloud) path = path.replace("_cloud_", "");
-		var packed_assets: Array<TPackedAsset> = getPackedAssets(path, texture_files);
+		var packed_assets: Array<TPackedAsset> = null;
+		if (!Context.packAssetsOnExport) {
+			packed_assets = getPackedAssets(path, texture_files);
+		}
 
 		var raw: TProjectFormat = {
 			version: Main.version,
@@ -179,11 +235,9 @@ class ExportArm {
 		};
 
 		if (Context.writeIconOnExport) { // Separate icon files
-			var pngBytes = getPngBytes(m.image);
-			Krom.fileSaveBytes(path.substr(0, path.length - 4) + "_icon.png", pngBytes.getData(), pngBytes.length);
+			Krom.writePng(path.substr(0, path.length - 4) + "_icon.png", m.image.getPixels().getData(), m.image.width, m.image.height, 0);
 			if (isCloud) {
-				var jpgBytes = getJpgBytes(m.image);
-				Krom.fileSaveBytes(path.substr(0, path.length - 4) + "_icon.jpg", jpgBytes.getData(), jpgBytes.length);
+				Krom.writeJpg(path.substr(0, path.length - 4) + "_icon.jpg", m.image.getPixels().getData(), m.image.width, m.image.height, 0, 50);
 			}
 		}
 
@@ -218,7 +272,10 @@ class ExportArm {
 		var texture_files = assetsToFiles(path, assets);
 		var isCloud = path.endsWith("_cloud_.arm");
 		if (isCloud) path = path.replace("_cloud_", "");
-		var packed_assets: Array<TPackedAsset> = getPackedAssets(path, texture_files);
+		var packed_assets: Array<TPackedAsset> = null;
+		if (!Context.packAssetsOnExport) {
+			packed_assets = getPackedAssets(path, texture_files);
+		}
 
 		var raw = {
 			version: Main.version,
@@ -234,8 +291,7 @@ class ExportArm {
 		};
 
 		if (Context.writeIconOnExport) { // Separate icon file
-			var pngBytes = getPngBytes(b.image);
-			Krom.fileSaveBytes(path.substr(0, path.length - 4) + "_icon.png", pngBytes.getData(), pngBytes.length);
+			Krom.writePng(path.substr(0, path.length - 4) + "_icon.png", b.image.getPixels().getData(), b.image.width, b.image.height, 0);
 		}
 
 		if (Context.packAssetsOnExport) { // Pack textures
@@ -249,8 +305,12 @@ class ExportArm {
 	static function assetsToFiles(projectPath: String, assets: Array<TAsset>): Array<String> {
 		var texture_files: Array<String> = [];
 		for (a in assets) {
-			// Convert image path from absolute to relative
+			#if krom_ios
+			var sameDrive = false;
+			#else
 			var sameDrive = projectPath.charAt(0) == a.file.charAt(0);
+			#end
+			// Convert image path from absolute to relative
 			if (sameDrive) {
 				texture_files.push(Path.toRelative(projectPath, a.file));
 			}
@@ -264,8 +324,12 @@ class ExportArm {
 	static function meshesToFiles(projectPath: String): Array<String> {
 		var mesh_files: Array<String> = [];
 		for (file in Project.meshAssets) {
-			// Convert mesh path from absolute to relative
+			#if krom_ios
+			var sameDrive = false;
+			#else
 			var sameDrive = projectPath.charAt(0) == file.charAt(0);
+			#end
+			// Convert mesh path from absolute to relative
 			if (sameDrive) {
 				mesh_files.push(Path.toRelative(projectPath, file));
 			}
@@ -280,8 +344,12 @@ class ExportArm {
 		var font_files: Array<String> = [];
 		for (i in 1...fonts.length) {
 			var f = fonts[i];
-			// Convert font path from absolute to relative
+			#if krom_ios
+			var sameDrive = false;
+			#else
 			var sameDrive = projectPath.charAt(0) == f.file.charAt(0);
+			#end
+			// Convert font path from absolute to relative
 			if (sameDrive) {
 				font_files.push(Path.toRelative(projectPath, f.file));
 			}
@@ -292,34 +360,16 @@ class ExportArm {
 		return font_files;
 	}
 
-	static function getJpgBytes(image: kha.Image, quality = 50): haxe.io.Bytes {
-		var out = new haxe.io.BytesOutput();
-		var writer = new arm.format.JpgWriter(out);
-		writer.write(
-			{
-				width: image.width,
-				height: image.height,
-				quality: quality,
-				pixels: image.getPixels()
-			}, 1
-		);
-		return out.getBytes();
-	}
-
-	static function getPngBytes(image: kha.Image): haxe.io.Bytes {
-		var out = new haxe.io.BytesOutput();
-		var writer = new arm.format.PngWriter(out);
-		var data = arm.format.PngTools.build32RGBA(image.width, image.height, image.getPixels());
-		writer.write(data);
-		return out.getBytes();
-	}
-
 	static function getPackedAssets(projectPath: String, texture_files: Array<String>): Array<TPackedAsset> {
 		var packed_assets: Array<TPackedAsset> = null;
 		if (Project.raw.packed_assets != null) {
 			for (pa in Project.raw.packed_assets) {
-				// Convert path from absolute to relative
+				#if krom_ios
+				var sameDrive = false;
+				#else
 				var sameDrive = projectPath.charAt(0) == pa.name.charAt(0);
+				#end
+				// Convert path from absolute to relative
 				pa.name = sameDrive ? Path.toRelative(projectPath, pa.name) : pa.name;
 				for (tf in texture_files) {
 					if (pa.name == tf) {
@@ -341,14 +391,20 @@ class ExportArm {
 		}
 		var tempImages: Array<kha.Image> = [];
 		for (i in 0...assets.length) {
-			if (!Project.packedAssetExists(raw.packed_assets, raw.assets[i])) {
+			if (!Project.packedAssetExists(raw.packed_assets, assets[i].file)) {
 				var image = Project.getImage(assets[i]);
 				var temp = kha.Image.createRenderTarget(image.width, image.height);
 				temp.g2.begin(false);
 				temp.g2.drawImage(image, 0, 0);
 				temp.g2.end();
 				tempImages.push(temp);
-				raw.packed_assets.push({ name: raw.assets[i], bytes: assets[i].name.endsWith(".jpg") ? getJpgBytes(temp, 80) : getPngBytes(temp) });
+				raw.packed_assets.push({
+					name: assets[i].file,
+					bytes: Bytes.ofData(assets[i].file.endsWith(".jpg") ?
+						Krom.encodeJpg(temp.getPixels().getData(), temp.width, temp.height, 0, 80) :
+						Krom.encodePng(temp.getPixels().getData(), temp.width, temp.height, 0)
+					)
+				});
 			}
 		}
 		App.notifyOnNextFrame(function() {

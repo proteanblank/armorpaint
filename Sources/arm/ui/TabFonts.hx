@@ -4,6 +4,8 @@ import zui.Zui;
 import zui.Id;
 import iron.system.Time;
 import arm.io.ImportFont;
+import arm.data.FontSlot;
+import arm.util.RenderUtil;
 import arm.Enums;
 
 class TabFonts {
@@ -11,10 +13,15 @@ class TabFonts {
 	@:access(zui.Zui)
 	public static function draw() {
 		var ui = UISidebar.inst.ui;
-		if (ui.tab(UISidebar.inst.htab2, tr("Fonts"))) {
+		var statush = Config.raw.layout[LayoutStatusH];
+		if (ui.tab(UIStatus.inst.statustab, tr("Fonts")) && statush > UIStatus.defaultStatusH * ui.SCALE()) {
 
 			ui.beginSticky();
+			#if arm_touchui
 			ui.row([1 / 4, 1 / 4]);
+			#else
+			ui.row([1 / 14, 1 / 14]);
+			#end
 
 			if (ui.button(tr("Import"))) Project.importAsset("ttf,ttc,otf");
 			if (ui.isHovered) ui.tooltip(tr("Import font file"));
@@ -25,8 +32,9 @@ class TabFonts {
 			ui.endSticky();
 			ui.separator(3, false);
 
+			var statusw = kha.System.windowWidth() - UIToolbar.inst.toolbarw - Config.raw.layout[LayoutSidebarW];
 			var slotw = Std.int(51 * ui.SCALE());
-			var num = Std.int(Config.raw.layout[LayoutSidebarW] / slotw);
+			var num = Std.int(statusw / slotw);
 
 			for (row in 0...Std.int(Math.ceil(Project.fonts.length / num))) {
 				var mult = Config.raw.show_asset_names ? 2 : 1;
@@ -84,23 +92,31 @@ class TabFonts {
 						Context.selectTime = Time.time();
 					}
 					if (ui.isHovered && ui.inputReleasedR) {
+						Context.selectFont(i);
 						var add = Project.fonts.length > 1 ? 1 : 0;
 						var fontName = Project.fonts[i].name;
 						UIMenu.draw(function(ui: Zui) {
 							ui.text(fontName, Right, ui.t.HIGHLIGHT_COL);
 
-							if (Project.fonts.length > 1 && ui.button(tr("Delete"), Left) && Project.fonts[i].file != "") {
-								function _init() {
-									Context.selectFont(i == 0 ? 1 : 0);
-									iron.data.Data.deleteFont(Project.fonts[i].file);
-									Project.fonts.splice(i, 1);
-								}
-								iron.App.notifyOnInit(_init);
-								UISidebar.inst.hwnd2.redraws = 2;
+							if (Project.fonts.length > 1 && ui.button(tr("Delete"), Left, "delete") && Project.fonts[i].file != "") {
+								deleteFont(Project.fonts[i]);
 							}
 						}, 1 + add);
 					}
-					if (ui.isHovered && img != null) ui.tooltipImage(img);
+					if (ui.isHovered) {
+						if (img == null) {
+							iron.App.notifyOnInit(function() {
+								var _font = Context.font;
+								Context.font = Project.fonts[i];
+								RenderUtil.makeFontPreview();
+								Context.font = _font;
+							});
+						}
+						else {
+							ui.tooltipImage(img);
+							ui.tooltip(Project.fonts[i].name);
+						}
+					}
 
 					if (Config.raw.show_asset_names) {
 						ui._x = uix;
@@ -116,6 +132,24 @@ class TabFonts {
 
 				ui._y += 6;
 			}
+
+			var inFocus = ui.inputX > ui._windowX && ui.inputX < ui._windowX + ui._windowW &&
+						  ui.inputY > ui._windowY && ui.inputY < ui._windowY + ui._windowH;
+			if (inFocus && ui.isDeleteDown && Project.fonts.length > 1 && Context.font.file != "") {
+				ui.isDeleteDown = false;
+				deleteFont(Context.font);
+			}
 		}
+	}
+
+	static function deleteFont(font: FontSlot) {
+		var i = Project.fonts.indexOf(font);
+		function _init() {
+			Context.selectFont(i == Project.fonts.length - 1 ? i - 1 : i + 1);
+			iron.data.Data.deleteFont(Project.fonts[i].file);
+			Project.fonts.splice(i, 1);
+		}
+		iron.App.notifyOnInit(_init);
+		UIStatus.inst.statusHandle.redraws = 2;
 	}
 }

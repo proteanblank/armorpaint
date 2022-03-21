@@ -6,7 +6,6 @@ import iron.data.MaterialData;
 import arm.ui.UIHeader;
 import arm.ui.UISidebar;
 import arm.util.RenderUtil;
-import arm.util.MaterialUtil;
 import arm.sys.Path;
 import arm.sys.File;
 import arm.shader.NodesMaterial;
@@ -26,6 +25,7 @@ class ImportFolder {
 		var mapmet = "";
 		var mapheight = "";
 
+		var foundTexture = false;
 		// Import maps
 		for (f in files) {
 			if (!Path.isTexture(f)) continue;
@@ -63,7 +63,15 @@ class ImportFolder {
 				valid = true;
 			}
 
-			if (valid) ImportTexture.run(path + Path.sep + f);
+			if (valid) {
+				ImportTexture.run(path + Path.sep + f, false);
+				foundTexture = true;
+			}
+		}
+
+		if (!foundTexture) {
+			Console.info(tr("Folder does not contain textures"));
+			return;
 		}
 
 		// Create material
@@ -74,8 +82,18 @@ class ImportFolder {
 		var dirs = path.split(Path.sep);
 		canvas.name = dirs[dirs.length - 1];
 		var nout: TNode = null;
-		for (n in canvas.nodes) if (n.type == "OUTPUT_MATERIAL_PBR") { nout = n; break; }
-		for (n in canvas.nodes) if (n.name == "RGB") { nodes.removeNode(n, canvas); break; }
+		for (n in canvas.nodes) {
+			if (n.type == "OUTPUT_MATERIAL_PBR") {
+				nout = n;
+				break;
+			}
+		}
+		for (n in canvas.nodes) {
+			if (n.name == "RGB") {
+				nodes.removeNode(n, canvas);
+				break;
+			}
+		}
 
 		// Place nodes
 		var pos = 0;
@@ -113,6 +131,7 @@ class ImportFolder {
 		MakeMaterial.parsePaintMaterial();
 		RenderUtil.makeMaterialPreview();
 		UISidebar.inst.hwnd1.redraws = 2;
+		History.newMaterial();
 	}
 
 	static function placeImageNode(nodes: Nodes, canvas: TNodeCanvas, asset: String, ny: Int, to_id: Int, to_socket: Int) {

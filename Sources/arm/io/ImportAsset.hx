@@ -4,16 +4,19 @@ import arm.sys.Path;
 import arm.sys.File;
 import arm.ui.UINodes;
 import arm.ui.UIBox;
+import arm.ui.UIHeader;
 import arm.Project;
 
 class ImportAsset {
 
-	public static function run(path: String, dropX = -1.0, dropY = -1.0, showBox = true, hdrAsEnvmap = true) {
+	public static function run(path: String, dropX = -1.0, dropY = -1.0, showBox = true, hdrAsEnvmap = true, done: Void->Void = null) {
 
 		if (path.startsWith("cloud")) {
-			var abs = File.cacheCloud(path);
-			if (abs == null) return;
-			path = abs;
+			File.cacheCloud(path, function(abs: String) {
+				if (abs == null) return;
+				run(abs, dropX, dropY, showBox, hdrAsEnvmap, done);
+			});
+			return;
 		}
 
 		if (Path.isMesh(path)) {
@@ -37,6 +40,10 @@ class ImportAsset {
 				UINodes.inst.getNodes().nodesDrag = false;
 				UINodes.inst.hwnd.redraws = 2;
 			}
+			if (Context.tool == ToolColorId && Project.assetNames.length == 1) {
+				UIHeader.inst.headerHandle.redraws = 2;
+				Context.ddirty = 2;
+			}
 		}
 		else if (Path.isFont(path)) {
 			ImportFont.run(path);
@@ -55,8 +62,10 @@ class ImportAsset {
 				run(path, dropX, dropY, showBox);
 			}
 			else {
-				Log.error(Strings.error1());
+				Console.error(Strings.error1());
 			}
 		}
+
+		if (done != null) done();
 	}
 }

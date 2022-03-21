@@ -34,7 +34,7 @@ class Uniforms {
 				var decalMask = decal && Operator.shortcut(Config.keymap.decal_mask + "+" + Config.keymap.action_paint, ShortcutDown);
 				var brushDecalMaskRadius = Context.brushDecalMaskRadius;
 				if (Config.raw.brush_3d) {
-					brushDecalMaskRadius *= Context.paint2d ? 0.55 : 2.0;
+					brushDecalMaskRadius *= Context.paint2d ? 0.55 * UIView2D.inst.panScale : 2.0;
 				}
 				var radius = decalMask ? brushDecalMaskRadius : Context.brushRadius;
 				var val = (radius * Context.brushNodesRadius) / 15.0;
@@ -45,7 +45,7 @@ class Uniforms {
 				var scale2d = (900 / App.h()) * Config.raw.window_scale;
 
 				if (Config.raw.brush_3d && !decal) {
-					val *= Context.paint2d ? 0.55 * scale2d : 2;
+					val *= Context.paint2d ? 0.55 * scale2d * UIView2D.inst.panScale : 2;
 				}
 				else {
 					val *= scale2d; // Projection ratio
@@ -72,8 +72,13 @@ class Uniforms {
 				if (Config.raw.pressure_hardness && pen.down()) {
 					val *= pen.pressure * Config.raw.pressure_sensitivity;
 				}
-				if (Config.raw.brush_3d && !Context.paint2d) {
-					val *= val;
+				if (Config.raw.brush_3d) {
+					if (Context.paint2d) {
+						val *= 1.0 / UIView2D.inst.panScale;
+					}
+					else {
+						val *= val;
+					}
 				}
 				return val;
 			}
@@ -101,19 +106,19 @@ class Uniforms {
 				return Context.layer.decalMat.getScale().z * 0.5;
 			}
 			case "_pickerOpacity": {
-				return Context.swatch.opacity;
+				return Context.pickedColor.opacity;
 			}
 			case "_pickerOcclusion": {
-				return Context.swatch.occlusion;
+				return Context.pickedColor.occlusion;
 			}
 			case "_pickerRoughness": {
-				return Context.swatch.roughness;
+				return Context.pickedColor.roughness;
 			}
 			case "_pickerMetallic": {
-				return Context.swatch.metallic;
+				return Context.pickedColor.metallic;
 			}
 			case "_pickerHeight": {
-				return Context.swatch.height;
+				return Context.pickedColor.height;
 			}
 		}
 		if (MaterialParser.script_links != null) {
@@ -125,7 +130,7 @@ class Uniforms {
 						result = js.Lib.eval(script);
 					}
 					catch(e: Dynamic) {
-						Log.trace(e);
+						Console.log(e);
 					}
 				}
 				return result;
@@ -179,7 +184,10 @@ class Uniforms {
 				var y = Context.paintVec.y;
 				var lastx = Context.prevPaintVecX;
 				var lasty = Context.prevPaintVecY;
-				if (Context.paint2d) { x = vec2d(x); lastx = vec2d(lastx); }
+				if (Context.paint2d) {
+					x = vec2d(x);
+					lastx = vec2d(lastx);
+				}
 				var angle = Math.atan2(-y + lasty, x - lastx) - Math.PI / 2;
 				v.set(Math.cos(angle), Math.sin(angle), allowPaint ? 1 : 0);
 				Context.prevPaintVecX = Context.lastPaintVecX;
@@ -198,14 +206,21 @@ class Uniforms {
 			}
 			case "_pickerBase": {
 				v = iron.object.Uniforms.helpVec;
-				v.set(Context.swatch.base.R, Context.swatch.base.G, Context.swatch.base.B);
+				v.set(Context.pickedColor.base.R, Context.pickedColor.base.G, Context.pickedColor.base.B);
 				return v;
 			}
 			case "_pickerNormal": {
 				v = iron.object.Uniforms.helpVec;
-				v.set(Context.swatch.normal.R, Context.swatch.normal.G, Context.swatch.normal.B);
+				v.set(Context.pickedColor.normal.R, Context.pickedColor.normal.G, Context.pickedColor.normal.B);
 				return v;
 			}
+			#if arm_physics
+			case "_particleHit": {
+				v = iron.object.Uniforms.helpVec;
+				v.set(Context.particleHitX, Context.particleHitY, Context.particleHitZ);
+				return v;
+			}
+			#end
 		}
 
 		return v;
@@ -298,6 +313,13 @@ class Uniforms {
 				}
 				return UVUtil.trianglemap;
 			}
+			case "_texuvislandmap": {
+				function _init() {
+					UVUtil.cacheUVIslandMap();
+				}
+				iron.App.notifyOnInit(_init);
+				return UVUtil.uvislandmapCached ? UVUtil.uvislandmap : RenderPath.active.renderTargets.get("empty_black").image;
+			}
 			case "_texdilatemap": {
 				return UVUtil.dilatemap;
 			}
@@ -322,9 +344,6 @@ class Uniforms {
 				var i = History.undoI - 1 < 0 ? Config.raw.undo_steps - 1 : History.undoI - 1;
 				return RenderPath.active.renderTargets.get("texpaint_pack_undo" + i).image;
 			}
-			case "_texpaint_mask": {
-				return Context.layer.texpaint_mask;
-			}
 			case "_texparticle": {
 				return RenderPath.active.renderTargets.get("texparticle").image;
 			}
@@ -344,13 +363,9 @@ class Uniforms {
 			var tid = link.substr(link.length - 1);
 			return RenderPath.active.renderTargets.get("texpaint_pack" + tid).image;
 		}
-		if (link.startsWith("_texpaint_mask_vert")) {
+		if (link.startsWith("_texpaint_vert")) {
 			var tid = Std.parseInt(link.substr(link.length - 1));
-			return tid < Project.layers.length ? Project.layers[tid].texpaint_mask : null;
-		}
-		if (link.startsWith("_texpaint_mask")) {
-			var tid = Std.parseInt(link.substr(link.length - 1));
-			return tid < Project.layers.length ? Project.layers[tid].texpaint_mask : null;
+			return tid < Project.layers.length ? Project.layers[tid].texpaint : null;
 		}
 		if (link.startsWith("_texpaint_nor")) {
 			var tid = Std.parseInt(link.substr(link.length - 1));
